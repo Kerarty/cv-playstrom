@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Resume Delivery 2037 — RU</title>
+<meta name="description" content="Играбельный отклик геймдизайнера на вакансию в Playstrom: мини-смена в пункте выдачи Rocket Post.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <b data-i="title"></b>
+    <span data-i="tagline"></span>
+  </div>
+  <nav>
+    <button id="btnSkip" class="btn ghost" data-i="skip"></button>
+    <button id="btnCv" class="btn ghost" data-i="justcv"></button>
+    <button id="btnLang" class="btn accent"></button>
+  </nav>
+</header>
+
+<section id="game">
+  <div id="stage"></div>
+  <div id="hint"></div>
+  <div id="banner"></div>
+  <div id="toast"></div>
+
+  <div id="intro" class="overlay">
+    <div class="panel intro-panel">
+      <h1 data-i="title"></h1>
+      <p class="muted" data-i="subtitle"></p>
+      <button id="btnStart" class="btn accent big" data-i="start" disabled></button>
+      <p class="tiny">Ярослав Кукар · Game Designer · <a href="https://github.com/Kerarty" target="_blank" rel="noopener">github.com/Kerarty</a></p>
+    </div>
+  </div>
+
+  <div id="card" class="overlay hidden">
+    <div class="panel">
+      <h2 id="cardTitle"></h2>
+      <p id="cardDesc"></p>
+      <p class="tags" id="cardTags"></p>
+      <button id="btnOk" class="btn accent"></button>
+    </div>
+  </div>
+
+  <div id="tuner" class="overlay hidden">
+    <div class="panel tuner-panel">
+      <h2 id="tunerTitle"></h2>
+      <p class="muted" id="tunerSub"></p>
+      <div class="slider-row"><label id="lblDmg"></label><input id="sDmg" type="range" min="0" max="3" step="1" value="0"></div>
+      <div class="slider-row"><label id="lblRof"></label><input id="sRof" type="range" min="0" max="3" step="1" value="0"></div>
+      <div class="slider-row"><label id="lblRng"></label><input id="sRng" type="range" min="0" max="3" step="1" value="0"></div>
+      <div class="tuner-stats">
+        <div><span id="vDps">0</span><small data-i="dps"></small></div>
+        <div><span id="vCoverage">0%</span><small data-i="coverage"></small></div>
+        <div><span id="vForecast">0</span><small data-i="forecast"></small></div>
+      </div>
+      <div class="tuner-foot">
+        <span id="vPts"></span>
+        <button id="btnGo" class="btn accent"></button>
+      </div>
+    </div>
+  </div>
+
+  <div id="finale" class="overlay hidden">
+    <div class="panel finale-panel">
+      <h2 id="finaleTitle"></h2>
+      <p class="muted" id="finaleSub"></p>
+      <h3 id="reportTitle"></h3>
+      <div id="reportBody"></div>
+      <h3 id="timelineTitle"></h3>
+      <div id="timelineBody"></div>
+      <p class="finale-contacts">
+        <a href="tel:+375447838489">+375 44 783 84 89</a> ·
+        <a href="mailto:kukar.y@gmail.com">kukar.y@gmail.com</a> ·
+        <a href="https://github.com/Kerarty" target="_blank" rel="noopener">github.com/Kerarty</a>
+      </p>
+      <div class="finale-btns">
+        <button id="btnAgain" class="btn accent"></button>
+        <button id="btnToCv" class="btn ghost"></button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="cv"></section>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
