@@ -1,15 +1,21 @@
 // Данные отклика: посылки, волны, тюнер
 export const C = {
-  bg1: 0x14101f, bg2: 0x241b38,
-  cream: 0xede1cc, creamDark: 0xd8c8a8, creamShadow: 0xc4b294,
-  cardboard: 0xc29e6f, cardboardDark: 0x96754d, cardboardTop: 0xd3b285,
-  tape: 0xefe9d8,
-  charcoal: 0x3a3442, charcoalDark: 0x2b2634,
-  orange: 0xff8c26, orangeDark: 0xd96f14,
-  blue: 0x38b6ff, blueDark: 0x1f86c9,
-  red: 0xf2473f,
-  white: 0xf4f1ea,
-  ink: 0x2b2634,
+  // дневное небо и остров
+  skyTop: 0x8fd3ff, skyBottom: 0xf2f9ff,
+  ground: 0xf6ecd4, groundSide: 0xd9c49c, gridLine: 0xd8c8a6,
+  cream: 0xf6ecd4, creamDark: 0xe8d9b8,
+  // картон и упаковка
+  cardboard: 0xc99a5f, cardboardDark: 0xa37945, cardboardTop: 0xe0b57e,
+  tape: 0xfff6e0,
+  // магазин
+  charcoal: 0x4a4258, charcoalDark: 0x3a3448,
+  door: 0x6b5136, glass: 0xbfe6ff,
+  // бренды
+  orange: 0xff9426, orangeDark: 0xe0760f,
+  blue: 0x3ab7ff, blueDark: 0x1f86c9, blueLight: 0x8ad4ff,
+  red: 0xff5347,
+  white: 0xffffff,
+  ink: 0x33291c,
 };
 
 // типы модулей: weapon — орудие, floor — этаж, helper — робот, upgrade — апгрейд, final — финал

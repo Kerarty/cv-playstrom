@@ -7,6 +7,12 @@ import { Loc } from './loc.js';
 const OX = 620, OY = 300, SX = 44, SY = 22, ZS = 38;
 const iso = (x, y, z = 0) => ({ x: OX + (x - y) * SX, y: OY + (x + y) * SY - z * ZS });
 
+function lerpColor(a, b, k) {
+  const ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255;
+  const br = (b >> 16) & 255, bgc = (b >> 8) & 255, bb = b & 255;
+  return (Math.round(ar + (br - ar) * k) << 16) | (Math.round(ag + (bgc - ag) * k) << 8) | Math.round(ab + (bb - ab) * k);
+}
+
 function poly(g, pts, color, alpha = 1) {
   g.poly(pts.map(p => [p.x, p.y]).flat()).fill({ color, alpha });
 }
@@ -52,12 +58,22 @@ class Enemy {
     const s = scale;
     this.view = new PIXI.Container();
     const g = new PIXI.Graphics();
-    g.roundRect(-22 * s, -34 * s, 44 * s, 40 * s, 10 * s).fill(C.blue);
-    g.roundRect(-22 * s, -34 * s, 44 * s, 12 * s, 10 * s).fill(C.blueDark);
-    g.circle(0, -40 * s, 14 * s).fill(C.blue);
-    g.roundRect(-9 * s, -46 * s, 18 * s, 7 * s, 3 * s).fill(boss ? C.red : C.white);
-    g.circle(-14 * s, 6 * s, 6 * s).fill(C.blueDark);
-    g.circle(14 * s, 6 * s, 6 * s).fill(C.blueDark);
+    // антенна с оранжевым шариком
+    g.moveTo(0, -46 * s).lineTo(0, -60 * s).stroke({ width: 3 * s, color: C.blueDark });
+    g.circle(0, -64 * s, 5 * s).fill(C.orange);
+    // корпус и светлая панелька
+    g.roundRect(-22 * s, -44 * s, 44 * s, 42 * s, 13 * s).fill(C.blue);
+    g.roundRect(-15 * s, -18 * s, 30 * s, 12 * s, 6 * s).fill(C.blueLight);
+    // глаз-пирожочек
+    g.circle(0, -32 * s, 11 * s).fill(C.white);
+    g.circle(3 * s, -32 * s, 5 * s).fill(C.ink);
+    if (boss) {
+      g.roundRect(-13 * s, -48 * s, 9 * s, 4 * s, 2 * s).fill(C.red);
+      g.roundRect(4 * s, -48 * s, 9 * s, 4 * s, 2 * s).fill(C.red);
+    }
+    // боковые колёсики
+    g.circle(-23 * s, -2 * s, 6 * s).fill(C.blueDark);
+    g.circle(23 * s, -2 * s, 6 * s).fill(C.blueDark);
     this.body = g;
     this.shadow = new PIXI.Graphics();
     this.shadow.ellipse(0, 0, 24 * s, 11 * s).fill({ color: 0x000000, alpha: 0.25 });
@@ -75,8 +91,8 @@ class Enemy {
     const w = 48 * (this.hp / this.maxHp);
     this.hpBar.clear();
     if (this.hp < this.maxHp) {
-      this.hpBar.rect(-24, -58, 48, 5).fill({ color: 0x000000, alpha: 0.4 });
-      this.hpBar.rect(-24, -58, w, 5).fill(C.red);
+      this.hpBar.rect(-24, -80, 48, 5).fill({ color: 0x000000, alpha: 0.35 });
+      this.hpBar.rect(-24, -80, w, 5).fill(C.red);
     }
   }
 
@@ -101,7 +117,12 @@ class Enemy {
     this.hp -= dmg;
     this.body.alpha = 0.5;
     tween(this.body, { alpha: 1 }, 0.15);
-    if (this.hp <= 0) { this.dead = true; this.destroy(); return true; }
+    if (this.hp <= 0) {
+      this.dead = true;
+      game.spawnPop(this.view.x, this.view.y - 24, this.boss);
+      this.destroy();
+      return true;
+    }
     return false;
   }
 
@@ -161,24 +182,40 @@ export const game = {
     L.fx = new PIXI.Container();
     stage.addChild(L.bg, L.ground, L.marks, L.belt, L.store, L.tower, L.boxes, L.enemiesLayer, L.shots, L.fx);
 
-    // фон-градиент
+    // дневное небо — мягкий градиент
     const bg = new PIXI.Graphics();
-    bg.rect(0, 0, 1280, 720).fill(C.bg1);
-    for (let i = 0; i < 30; i++) {
-      bg.rect(0, i * 24, 1280, 24).fill({ color: i % 2 ? C.bg1 : C.bg2, alpha: 0.35 });
+    for (let i = 0; i < 36; i++) {
+      bg.rect(0, i * 20, 1280, 21).fill(lerpColor(C.skyTop, C.skyBottom, i / 35));
     }
     L.bg.addChild(bg);
 
-    // земля
+    // остров-площадка с толщиной и лёгкой сеткой
     const g = new PIXI.Graphics();
-    poly(g, [iso(-11, -6.5), iso(11, -6.5), iso(11, 6.5), iso(-11, 6.5)], C.cream);
+    poly(g, [iso(-11, -6.5), iso(11, -6.5), iso(11, 6.5), iso(-11, 6.5)].map(p => ({ x: p.x, y: p.y + 14 })), C.groundSide);
+    poly(g, [iso(-11, -6.5), iso(11, -6.5), iso(11, 6.5), iso(-11, 6.5)], C.ground);
+    for (let x = -10; x <= 10; x += 2) g.moveTo(iso(x, -6.5).x, iso(x, -6.5).y).lineTo(iso(x, 6.5).x, iso(x, 6.5).y);
+    for (let y = -6; y <= 6; y += 2) g.moveTo(iso(-11, y).x, iso(-11, y).y).lineTo(iso(11, y).x, iso(11, y).y);
+    g.stroke({ width: 1, color: C.gridLine, alpha: 0.45 });
     L.ground.addChild(g);
 
-    // метки пути роботов
+    // стрелки пути роботов — цепочка к магазину
     const m = new PIXI.Graphics();
-    for (const [x, y] of PATH) {
-      const p = iso(x, y, 0.02);
-      m.poly([[p.x - 20, p.y], [p.x, p.y + 10], [p.x + 20, p.y], [p.x, p.y - 10]]).fill({ color: C.blue, alpha: 0.5 });
+    for (let i = 0; i < PATH.length - 1; i++) {
+      const [ax, ay] = PATH[i];
+      const [bx, by] = PATH[i + 1];
+      const d = Math.hypot(bx - ax, by - ay);
+      const n = Math.max(1, Math.round(d / 1.7));
+      const a0 = iso(ax, ay), b0 = iso(bx, by);
+      const ang = Math.atan2(b0.y - a0.y, b0.x - a0.x);
+      for (let k = 0; k < n; k++) {
+        const t = (k + 0.5) / n;
+        const p = iso(ax + (bx - ax) * t, ay + (by - ay) * t, 0.02);
+        m.poly([
+          p.x + Math.cos(ang) * 15, p.y + Math.sin(ang) * 15,
+          p.x + Math.cos(ang + 2.5) * 10, p.y + Math.sin(ang + 2.5) * 10,
+          p.x + Math.cos(ang - 2.5) * 10, p.y + Math.sin(ang - 2.5) * 10,
+        ]).fill({ color: C.blue, alpha: 0.55 });
+      }
     }
     L.marks.addChild(m);
 
@@ -187,16 +224,31 @@ export const game = {
     isoBox(b, CONVEYOR.to[0] - 0.45, 2.55, CONVEYOR.from[0] + 0.45, 3.45, 0, 0.25, C.charcoal, C.charcoalDark, C.charcoalDark);
     L.belt.addChild(b);
 
-    // магазин Rocket Post + вывеска
+    // магазин Rocket Post: окна, дверь, полосатый навес, вывеска
     const s = new PIXI.Graphics();
     isoBox(s, -2.8, -1.9, 2.8, 1.9, 0, 1.8, C.cardboardTop, C.cardboardDark, C.cardboard);
-    // полоса скотча на передней грани
-    poly(s, [iso(-0.45, 1.901, 1.8), iso(0.45, 1.901, 1.8), iso(0.45, 1.901, 0), iso(-0.45, 1.901, 0)], C.tape);
-    // вывеска на крыше
-    isoBox(s, -1.5, -0.12, 1.5, 0.12, 1.8, 2.5, C.orangeDark, C.orangeDark, C.orange);
+    poly(s, [iso(-0.35, 1.901, 1.1), iso(0.35, 1.901, 1.1), iso(0.35, 1.901, 0), iso(-0.35, 1.901, 0)], C.door);
+    poly(s, [iso(-2.2, 1.901, 1.35), iso(-1.4, 1.901, 1.35), iso(-1.4, 1.901, 0.75), iso(-2.2, 1.901, 0.75)], C.glass);
+    poly(s, [iso(1.4, 1.901, 1.35), iso(2.2, 1.901, 1.35), iso(2.2, 1.901, 0.75), iso(1.4, 1.901, 0.75)], C.glass);
+    const stripes = 8;
+    for (let i = 0; i < stripes; i++) {
+      const x0 = -2.8 + (5.6 / stripes) * i, x1 = x0 + 5.6 / stripes;
+      poly(s, [iso(x0, 1.9, 1.8), iso(x1, 1.9, 1.8), iso(x1, 2.35, 1.6), iso(x0, 2.35, 1.6)], i % 2 ? C.tape : C.orange);
+      poly(s, [iso(x0, 2.35, 1.6), iso(x1, 2.35, 1.6), iso(x1, 2.35, 1.45), iso(x0, 2.35, 1.45)], i % 2 ? C.tape : C.orangeDark);
+    }
+    isoBox(s, -1.6, -1.24, 1.6, -0.96, 1.8, 2.55, C.orangeDark, C.orangeDark, C.orange);
     const glow = new PIXI.Graphics();
-    glow.ellipse(iso(0, 0, 2.5).x, iso(0, 0, 2.5).y, 90, 30).fill({ color: C.orange, alpha: 0.12 });
+    glow.ellipse(iso(0, -1.1, 2.5).x, iso(0, -1.1, 2.5).y, 96, 32).fill({ color: C.orange, alpha: 0.18 });
     L.store.addChild(s, glow);
+    const signText = new PIXI.Text({
+      text: 'ROCKET POST',
+      style: { fontFamily: 'Nunito, sans-serif', fontSize: 26, fontWeight: '900', fill: 0xffffff, letterSpacing: 1 },
+    });
+    signText.anchor.set(0.5);
+    const sp = iso(0, -1.1, 2.2);
+    signText.position.set(sp.x, sp.y);
+    signText.scale.set(0.62);
+    L.store.addChild(signText);
 
     this.rebuildTower();
   },
@@ -225,7 +277,8 @@ export const game = {
     tg.rect(0, -4, 34, 8).fill(C.charcoal);
     turret.addChild(tg);
     const flash = new PIXI.Graphics();
-    flash.circle(36, 0, 9).fill(C.orange);
+    flash.poly([0, -14, 4, -4, 14, 0, 4, 4, 0, 14, -4, 4, -14, 0, -4, -4]).fill(C.orange);
+    flash.position.set(38, 0);
     flash.visible = false;
     turret.addChild(flash);
     this.turret = turret;
@@ -273,13 +326,19 @@ export const game = {
     ring.clear();
     if (this.scanT > 0.02) {
       // всё в локальных координатах контейнера коробки
-      ring.rect(-46, -132, 92, 9).fill({ color: 0x000000, alpha: 0.45 });
+      ring.rect(-46, -132, 92, 9).fill({ color: 0x000000, alpha: 0.35 });
       ring.rect(-44, -130, 88 * this.scanT, 5).fill(C.orange);
       const half = 0.42;
       const li = (x, y, z = 0) => { const p = iso(x, y, z); return { x: p.x - OX, y: p.y - OY }; };
       const pts = [li(-half, -half, 0.72), li(half, -half, 0.72), li(half, half, 0.72), li(-half, half, 0.72)]
         .map(q => [q.x, q.y]);
       ring.poly(pts.flat()).stroke({ width: 3, color: C.orange, alpha: 0.4 + 0.6 * this.scanT });
+      // искорки сканирования
+      const tw = performance.now() / 1000;
+      for (let i = 0; i < 3; i++) {
+        const a = tw * 2 + (i * Math.PI * 2) / 3;
+        ring.circle(Math.cos(a) * 55, -34 + Math.sin(a) * 40, 4).fill({ color: C.white, alpha: 0.55 + 0.45 * Math.sin(tw * 12 + i) });
+      }
     }
   },
 
@@ -313,6 +372,24 @@ export const game = {
       this.multipliers.dmg, this.multipliers.rof, this.multipliers.rng);
   },
 
+  // поп-эффект: кольцо + искры (уничтожение робота, доставка посылки)
+  spawnPop(x, y, big = false) {
+    const ring = new PIXI.Graphics();
+    ring.circle(0, 0, big ? 22 : 12).stroke({ width: 5, color: C.orange });
+    ring.position.set(x, y);
+    this.layers.fx.addChild(ring);
+    tween(ring, { scaleX: big ? 4 : 2.6, scaleY: big ? 4 : 2.6, alpha: 0 }, 0.4, () => ring.destroy());
+    for (let i = 0; i < (big ? 8 : 4); i++) {
+      const spark = new PIXI.Graphics();
+      spark.circle(0, 0, big ? 6 : 4).fill(i % 2 ? C.orange : C.blue);
+      spark.position.set(x, y);
+      this.layers.fx.addChild(spark);
+      const a = Math.random() * Math.PI * 2;
+      const d = big ? 90 : 50;
+      tween(spark, { x: x + Math.cos(a) * d, y: y + Math.sin(a) * d - 20, alpha: 0 }, 0.5, () => spark.destroy());
+    }
+  },
+
   fire() {
     const st = this.weapon();
     let best = null, bestD = Infinity;
@@ -322,7 +399,8 @@ export const game = {
     }
     if (!best) return;
     const shot = new PIXI.Graphics();
-    shot.circle(0, 0, 7).fill(C.orange);
+    shot.circle(0, 0, 8).fill(C.orange);
+    shot.circle(0, 0, 4).fill(C.white);
     shot.position.set(this.muzzlePos.x, this.muzzlePos.y);
     shot.userData = { target: best, dmg: st.damage };
     this.layers.shots.addChild(shot);
@@ -544,6 +622,7 @@ export const game = {
       this.towerStats.rof += this.currentDef.rof;
       this.towerStats.rng += this.currentDef.rng;
       this.rebuildTower();
+      this.spawnPop(target.x, target.y, false);
 
       const idx = this.boxIndex;
       this.boxIndex++;
@@ -555,6 +634,17 @@ export const game = {
         this.spawnBox();
       }
     }, t => t * t * (3 - 2 * t));
+  },
+
+  // мгновенная установка посылки в башню — для отладочных состояний ?shot=
+  placeDirect() {
+    this.currentDef = BOXES[this.boxIndex];
+    this.scanned.push(this.currentDef);
+    this.towerStats.dmg += this.currentDef.dmg;
+    this.towerStats.rof += this.currentDef.rof;
+    this.towerStats.rng += this.currentDef.rng;
+    this.boxIndex++;
+    this.rebuildTower();
   },
 
   skipToFinale() {
