@@ -1,6 +1,6 @@
-// DOM-интерфейс: интро, карточки, тюнер с живой математикой, отчёт, финал
+// DOM-интерфейс: интро, карточки, тюнер с живой математикой, отчёт, финал, CV
 import { Loc } from './loc.js';
-import { weaponStats, forecastBreaks } from './data.js';
+import { arsenalDps, forecastBreaks } from './data.js';
 
 const $ = id => document.getElementById(id);
 
@@ -15,7 +15,7 @@ export const ui = {
     $('btnSkip').onclick = () => game.skipToFinale();
     $('btnCv').onclick = () => $('cv').scrollIntoView({ behavior: 'smooth' });
     $('btnLang').onclick = () => { Loc.toggle(); this.applyLang(); };
-    $('btnOk').onclick = () => { $('card').classList.add('hidden'); game.placeBox(); };
+    $('btnOk').onclick = () => { $('card').classList.add('hidden'); game.onCardOk(); };
     $('btnGo').onclick = () => {
       const m = this.readTuner();
       game.multipliers = m;
@@ -49,10 +49,11 @@ export const ui = {
   setHint(text) { $('hint').textContent = text; },
 
   // ---- карточка факта ----
-  showCard(def) {
+  showCard(def, points) {
     $('cardTitle').textContent = Loc.t(def.id + '_t');
     $('cardDesc').textContent = Loc.t(def.id + '_d');
     $('cardTags').textContent = Loc.t(def.id + '_g');
+    $('cardPoints').textContent = '+' + Loc.t('toast_point');
     $('btnOk').textContent = Loc.t('ok');
     $('card').classList.remove('hidden');
   },
@@ -84,11 +85,10 @@ export const ui = {
     for (const id of ['sDmg', 'sRof', 'sRng']) $(id).dataset.prev = $(id).value;
 
     const m2 = this.readTuner();
-    const stats = weaponStats(g.towerStats.dmg, g.towerStats.rof, g.towerStats.rng,
-      1 + 0.4 * m2.dmg, 1 + 0.4 * m2.rof, 1 + 0.4 * m2.rng);
-    $('vDps').textContent = stats.dps.toFixed(1);
-    $('vCoverage').textContent = Math.round(Math.min(100, stats.range / 17 * 100)) + '%';
-    $('vForecast').textContent = '~' + forecastBreaks(g.wave ?? { drones: 6, crawlers: 0, swarm: 0, boss: false, hpMult: 1, speed: 1.2 }, stats);
+    const ars = arsenalDps(g.towers, m2);
+    $('vDps').textContent = ars.dps.toFixed(1);
+    $('vCoverage').textContent = ars.count;
+    $('vForecast').textContent = '~' + forecastBreaks(g.wave ?? { drones: 6, crawlers: 0, swarm: 0, boss: false, hpMult: 1, speed: 1.2, id: 'w1' }, ars.dps);
     $('vPts').textContent = Loc.t('pts_left') + ': ' + (3 - m2.dmg - m2.rof - m2.rng);
   },
 
@@ -146,39 +146,71 @@ export const ui = {
     $('finale').classList.remove('hidden');
   },
 
-  // ---- секция классического CV ----
+  // ---- блок CV: лист персонажа + квесты ----
   renderCv() {
+    const stats = [
+      ['stat_balance', 92], ['stat_gd', 85], ['stat_docs', 88], ['stat_math', 90], ['stat_code', 74],
+    ];
+    const quests = [
+      { t: 'eridor_t', d: 'eridor_d', g: 'eridor_g', reward: '★ ×15 плейтестов' },
+      { t: 'gdd_t', d: 'gdd_d', g: 'gdd_g', reward: '★ GDD → в разработку' },
+      { t: 'series_t', d: 'series_d', g: 'series_g', reward: '★ ×5 студий' },
+      { t: 'playables_t', d: 'playables_d', g: 'playables_g', reward: '★ 2 играбельных демо' },
+    ];
+    const questRewardEn = ['★ 15+ playtests', '★ GDD → production', '★ ×5 studios', '★ 2 playable demos'];
+
     $('cv').innerHTML = `
       <div class="cv-wrap">
         <h2>${Loc.t('justcv')}</h2>
         <div class="cv-grid">
-          <div>
+          <div class="cv-sheet">
+            <p class="cv-panel-label">${Loc.t('cv_sheet')}</p>
             <h3>Ярослав Кукар</h3>
-            <p class="cv-role">Game Designer</p>
+            <p class="cv-role">${Loc.t('cv_class')} ${Loc.t('cv_class_name')}</p>
+            <p class="cv-line"><b>${Loc.t('cv_guild')}</b> ${Loc.t('cv_guild_name')}</p>
+            <p class="cv-line"><b>${Loc.t('cv_level')}</b> ${Loc.t('cv_level_name')}</p>
             <p>${Loc.t('about_d')}</p>
-            <h4>${Loc.t('edu_t')}</h4>
-            <p>${Loc.t('edu_d')}</p>
-            <h4>${Loc.t('contacts_t')}</h4>
-            <p>
-              <a href="tel:+375447838489">+375 44 783 84 89</a> ·
-              <a href="mailto:kukar.y@gmail.com">kukar.y@gmail.com</a> ·
-              <a href="https://github.com/Kerarty" target="_blank" rel="noopener">github.com/Kerarty</a>
-            </p>
-            <p><a class="btn ghost" href="docs/CV_Yaroslav.pdf" target="_blank" rel="noopener">PDF</a></p>
+            <div class="cv-bars">
+              ${stats.map(([k, v]) => `
+                <div class="cv-bar">
+                  <span>${Loc.t(k)}</span>
+                  <div class="bar-track"><div class="bar-fill" style="--w:${v}%"></div></div>
+                  <em>${v}</em>
+                </div>`).join('')}
+            </div>
+            <p class="tiny">${Loc.t('about_g')}</p>
           </div>
-          <div>
-            <h4>${Loc.t('design_t')} · ${Loc.t('balance_t')} · ${Loc.t('code_t')}</h4>
-            <p>${Loc.t('design_g')} · ${Loc.t('balance_g')} · ${Loc.t('code_g')}</p>
-            <h4>${Loc.t('eridor_t')}</h4>
-            <p>${Loc.t('eridor_d')}</p>
-            <h4>${Loc.t('gdd_t')}</h4>
-            <p>${Loc.t('gdd_d')}</p>
-            <h4>${Loc.t('series_t')}</h4>
-            <p>${Loc.t('series_d')}</p>
-            <h4>${Loc.t('playables_t')}</h4>
-            <p>${Loc.t('playables_d')}</p>
+          <div class="cv-quests">
+            <h3>${Loc.t('cv_quests')}</h3>
+            ${quests.map((q, i) => `
+              <div class="quest">
+                <b>${Loc.t(q.t)}</b>
+                <p>${Loc.t(q.d)}</p>
+                <div class="quest-foot">
+                  <span class="tags">${Loc.t(q.g)}</span>
+                  <span class="reward">${Loc.lang === 'ru' ? q.reward : questRewardEn[i]}</span>
+                </div>
+              </div>`).join('')}
           </div>
         </div>
+        <div class="cv-join">
+          <h3>${Loc.t('cv_contacts_t')}</h3>
+          <p>
+            <a href="tel:+375447838489">+375 44 783 84 89</a> ·
+            <a href="mailto:kukar.y@gmail.com">kukar.y@gmail.com</a> ·
+            <a href="https://github.com/Kerarty" target="_blank" rel="noopener">github.com/Kerarty</a>
+          </p>
+          <a class="btn accent" href="docs/CV_Yaroslav.pdf" target="_blank" rel="noopener">PDF</a>
+        </div>
       </div>`;
+
+    // полоски статов заполняются, когда лист появляется на экране
+    const bars = $('cv').querySelectorAll('.bar-fill');
+    const io = new IntersectionObserver(entries => {
+      for (const e of entries) {
+        if (e.isIntersecting) { e.target.classList.add('on'); io.unobserve(e.target); }
+      }
+    }, { threshold: 0.4 });
+    bars.forEach(b => io.observe(b));
   },
 };

@@ -1,6 +1,8 @@
 // Точка входа: PixiJS → сцена → интерфейс
 import { game } from './game.js';
 import { ui } from './ui.js';
+import { BOXES } from './data.js';
+import { Loc } from './loc.js';
 
 try {
   // игровой шрифт нужен и DOM, и надписи на канвасе (вывеска)
@@ -10,25 +12,42 @@ try {
   ui.applyLang();
   document.body.dataset.ready = '1';
 
-  // отладочные состояния для скриншотов: ?shot=tuner | wave | finale
+  // отладочные состояния для скриншотов: ?shot=tuner | wave | build | finale | cv
   const shot = new URLSearchParams(location.search).get('shot');
   if (shot) {
     document.getElementById('intro').classList.add('hidden');
     document.getElementById('hint').textContent = '';
+    const stage3 = () => {
+      for (let i = 0; i < 3; i++) game.scanDirect();
+      // дальние от спавна площадки — роботы дойдут до кадра живыми
+      game.placeTower(3, game.scanned[0]);
+      game.placeTower(5, game.scanned[1]);
+      game.placeTower(7, game.scanned[2]);
+      game.towers[1].upgrade(); // показываем уровень на башне
+    };
     if (shot === 'tuner') {
-      for (let i = 0; i < 3; i++) game.placeDirect();
+      stage3();
       game.ui.showTuner();
     } else if (shot === 'wave') {
-      for (let i = 0; i < 3; i++) game.placeDirect();
+      stage3();
       game.multipliers = { dmg: 1.4, rof: 1.4, rng: 0.2 };
       game.startWave();
       // прокручиваю игровое время вручную: headless не качает rAF-тикер
-      for (let i = 0; i < 18; i++) game.update(0.1);
+      for (let i = 0; i < 20; i++) game.update(0.1);
+    } else if (shot === 'build') {
+      stage3();
+      game.scanDirect();
+      game.currentDef = BOXES[game.boxIndex - 1];
+      game.points = 1;
+      game.state = 'build';
+      game.ui.setHint(Loc.t('hint_build') + '  ·  ' + Loc.t('points') + ': 1');
     } else if (shot === 'finale') {
-      for (let i = 0; i < 5; i++) game.placeDirect();
+      for (let i = 0; i < 5; i++) { game.scanDirect(); game.placeTower(i, game.scanned[i]); }
       game.stats.waves.push({ killed: 12, broken: 1, total: 13, dps: 7.7 });
       game.startFinale();
       for (let i = 0; i < 30; i++) game.updateFinale(0.1);
+    } else if (shot === 'cv') {
+      document.getElementById('game').style.display = 'none';
     }
   }
 } catch (err) {

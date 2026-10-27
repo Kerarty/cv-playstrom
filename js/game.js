@@ -1,6 +1,6 @@
-// PixiJS-сцена: изометрический Rocket Post, конвейер, башня, роботы QuickBox
+// PixiJS-сцена: изометрический Rocket Post, конвейер, площадки башен, роботы QuickBox
 import * as PIXI from './vendor/pixi.min.mjs';
-import { C, BOXES, WAVES, WAVE_AFTER_BOX, PATH, CONVEYOR, weaponStats } from './data.js';
+import { C, BOXES, WAVES, WAVE_AFTER_BOX, PATH, SPOTS, CONVEYOR, towerStats } from './data.js';
 import { Loc } from './loc.js';
 
 // ---- изометрия: мир (x, y, z) → экран ----
@@ -45,13 +45,12 @@ function updateTweens(dt) {
 class Enemy {
   constructor(scene, wave, kind, hp, speed, scale, boss) {
     this.wave = wave;
-    this.kind = kind; // drone | crawler | swarm | boss
+    this.kind = kind;
     this.hp = hp; this.maxHp = hp;
     this.speed = speed;
     this.boss = boss;
     this.seg = 0;
     this.world = { x: PATH[0][0], y: PATH[0][1] };
-    this.t = 0;
     this.dead = false;
     this.phase = Math.random() * 10;
 
@@ -94,14 +93,17 @@ class Enemy {
       this.hpBar.rect(-24, -80, 48, 5).fill({ color: 0x000000, alpha: 0.35 });
       this.hpBar.rect(-24, -80, w, 5).fill(C.red);
     }
+    // под замедлением — голубой оттенок
+    this.body.tint = game.slowAt(this.world.x, this.world.y) < 1 ? 0xbfe6ff : 0xffffff;
   }
 
   update(dt) {
+    const slow = game.slowAt(this.world.x, this.world.y);
     const target = PATH[this.seg + 1];
-    if (!target) return true; // дошёл
+    if (!target) return true; // дошёл до магазина
     const dx = target[0] - this.world.x, dy = target[1] - this.world.y;
     const dist = Math.hypot(dx, dy);
-    const step = this.speed * dt;
+    const step = this.speed * slow * dt;
     if (step >= dist) {
       this.world.x = target[0]; this.world.y = target[1];
       this.seg++;
@@ -133,12 +135,195 @@ class Enemy {
   }
 }
 
+// ---- снаряд ----
+class Projectile {
+  constructor(from, target, dmg) {
+    this.target = target;
+    this.dmg = dmg;
+    this.vx = 0; this.vy = 0;
+    this.view = new PIXI.Graphics();
+    this.view.circle(0, 0, 8).fill(C.orange);
+    this.view.circle(0, 0, 4).fill(C.white);
+    this.view.position.set(from.x, from.y);
+    game.layers.shots.addChild(this.view);
+  }
+
+  update(dt) {
+    let tx, ty;
+    if (this.target && !this.target.dead) {
+      const p = iso(this.target.world.x, this.target.world.y, 0.6);
+      tx = p.x; ty = p.y;
+    } else {
+      tx = this.view.x + this.vx * dt; ty = this.view.y + this.vy * dt;
+    }
+    const dx = tx - this.view.x, dy = ty - this.view.y;
+    const dist = Math.hypot(dx, dy);
+    const speed = 560;
+    if (this.target && !this.target.dead && dist < 24) {
+      this.target.hit(this.dmg);
+      if (this.target.dead) game.waveKilled++;
+      this.destroy();
+      return;
+    }
+    if (dist > 0.001) {
+      this.view.x += dx / dist * speed * dt;
+      this.view.y += dy / dist * speed * dt;
+      if (!this.target || this.target.dead) { this.vx = dx / dist * speed; this.vy = dy / dist * speed; }
+    }
+    if (this.view.x < -50 || this.view.x > 1330 || this.view.y < -50 || this.view.y > 770) this.destroy();
+  }
+
+  destroy() {
+    this.view.destroy({ children: true });
+    const i = game.shots.indexOf(this);
+    if (i >= 0) game.shots.splice(i, 1);
+  }
+}
+
+// ---- башня на площадке ----
+class Tower {
+  constructor(spotIdx, def) {
+    this.spotIdx = spotIdx;
+    this.def = def;
+    this.kind = def.kind;
+    this.level = 1;
+    this.fireT = Math.random() * 0.4;
+    this.target = null;
+    this.buildView();
+  }
+
+  stats() {
+    const s = towerStats(this.def, game.multipliers);
+    const lvl = 1 + 0.35 * (this.level - 1);
+    const lvlRange = 1 + 0.1 * (this.level - 1);
+    return { ...s, dmg: s.dmg * lvl, range: s.range * lvlRange };
+  }
+
+  buildView() {
+    const p = iso(SPOTS[this.spotIdx][0], SPOTS[this.spotIdx][1], 0);
+    this.view = new PIXI.Container();
+    this.view.position.set(p.x, p.y);
+    const g = new PIXI.Graphics();
+    const pedestal = () => {
+      g.circle(0, 0, 24).fill(C.charcoal);
+      g.circle(0, 0, 18).fill(C.charcoalDark);
+    };
+    this.turret = new PIXI.Container();
+    const tg = new PIXI.Graphics();
+    switch (this.kind) {
+      case 'sniper':
+        pedestal();
+        tg.rect(0, -3, 44, 5).fill(C.blue);
+        tg.circle(0, 0, 12).fill(C.blueDark);
+        tg.circle(0, 0, 7).fill(C.white);
+        break;
+      case 'minigun':
+        pedestal();
+        tg.rect(0, -9, 30, 6).fill(C.charcoal);
+        tg.rect(0, 3, 30, 6).fill(C.charcoal);
+        tg.circle(0, 0, 11).fill(C.orangeDark);
+        tg.circle(0, 0, 6).fill(C.orange);
+        break;
+      case 'mortar':
+        g.circle(0, 0, 27).fill(C.charcoal);
+        g.circle(0, 0, 21).fill(C.charcoalDark);
+        tg.circle(0, 0, 14).fill(C.orangeDark);
+        tg.circle(0, 0, 9).fill(C.charcoal);
+        break;
+      case 'slow':
+        g.circle(0, 0, 22).fill(C.blueDark);
+        g.circle(0, 0, 15).fill(C.blue);
+        g.circle(0, 0, 7).fill(C.white);
+        this.ring = new PIXI.Graphics();
+        this.ring.ellipse(0, 0, 3.4 * SX, 3.4 * SY).stroke({ width: 2, color: C.blue, alpha: 0.35 });
+        this.view.addChildAt(this.ring, 0);
+        break;
+      case 'amp':
+        g.circle(0, 0, 22).fill(C.orangeDark);
+        g.circle(0, 0, 15).fill(C.orange);
+        g.poly([0, -12, 3.5, -3.5, 12, 0, 3.5, 3.5, 0, 12, -3.5, 3.5, -12, 0, -3.5, -3.5]).fill(C.white);
+        this.ring = new PIXI.Graphics();
+        this.ring.ellipse(0, 0, 3.0 * SX, 3.0 * SY).stroke({ width: 2, color: C.orange, alpha: 0.4 });
+        this.view.addChildAt(this.ring, 0);
+        break;
+      default: // cannon
+        pedestal();
+        tg.rect(0, -4, 34, 8).fill(C.charcoal);
+        tg.circle(0, 0, 13).fill(C.orange);
+        tg.circle(0, 0, 6).fill(C.white);
+    }
+    this.turret.addChild(tg);
+    const flash = new PIXI.Graphics();
+    flash.poly([0, -12, 3.5, -3.5, 12, 0, 3.5, 3.5, 0, 12, -3.5, 3.5, -12, 0, -3.5, -3.5]).fill(C.orange);
+    flash.position.set(40, 0);
+    flash.visible = false;
+    this.flash = flash;
+    this.turret.addChild(flash);
+    this.pips = new PIXI.Graphics();
+    this.view.addChild(g, this.turret, this.pips);
+    this.drawPips();
+    game.layers.towers.addChild(this.view);
+  }
+
+  drawPips() {
+    this.pips.clear();
+    for (let i = 0; i < this.level - 1; i++) {
+      this.pips.poly([
+        -8 + i * 9, -52, -5 + i * 9, -45, 0 + i * 9, -52, -5 + i * 9, -40,
+      ]).fill(C.orange);
+    }
+  }
+
+  // улучшение: уровень вверх, визуально подрастает
+  upgrade() {
+    this.level++;
+    this.drawPips();
+    tween(this.turret, { scaleX: 1 + 0.12 * (this.level - 1), scaleY: 1 + 0.12 * (this.level - 1) }, 0.3);
+  }
+
+  update(dt) {
+    const st = this.stats();
+    if (this.kind === 'slow' || this.kind === 'amp') {
+      if (this.ring) this.ring.alpha = 0.6 + 0.4 * Math.sin(performance.now() / 300 + this.spotIdx);
+      return;
+    }
+    this.fireT += dt;
+    if (this.fireT < st.interval) return;
+    let best = null, bestD = Infinity;
+    for (const e of game.enemies) {
+      const d = Math.hypot(e.world.x - SPOTS[this.spotIdx][0], e.world.y - SPOTS[this.spotIdx][1]);
+      if (d < bestD && d <= st.range) { bestD = d; best = e; }
+    }
+    if (!best) return;
+    this.fireT = 0;
+    const muzzle = iso(SPOTS[this.spotIdx][0], SPOTS[this.spotIdx][1], 0.75);
+    const aim = iso(best.world.x, best.world.y, 0.6);
+    this.turret.rotation = Math.atan2(aim.y - muzzle.y, aim.x - muzzle.x);
+    // усилители рядом добавляют урона
+    let buff = 1;
+    for (const t of game.towers) {
+      if (t.kind === 'amp' && Math.hypot(SPOTS[t.spotIdx][0] - SPOTS[this.spotIdx][0], SPOTS[t.spotIdx][1] - SPOTS[this.spotIdx][1]) <= t.stats().range) buff *= 1.3;
+    }
+    game.shots.push(new Projectile(muzzle, best, st.dmg * buff));
+    this.flash.visible = true;
+    tween(this.flash, { alpha: 0 }, 0.12, () => { this.flash.visible = false; this.flash.alpha = 1; });
+  }
+
+  destroy() {
+    this.view.destroy({ children: true });
+    const i = game.towers.indexOf(this);
+    if (i >= 0) game.towers.splice(i, 1);
+  }
+}
+
 // ---- состояние игры ----
 export const game = {
-  state: 'intro', // intro | belt | scan | card | fly | tuner | wave | finale_anim | finale
+  state: 'intro', // intro | belt | scan | card | build | fly | tuner | wave | finale_anim | finale
   app: null,
   layers: {},
   enemies: [],
+  towers: [],
+  shots: [],
   scanned: [],
   boxIndex: 0,
   waveIdx: 0,
@@ -146,10 +331,10 @@ export const game = {
   scanT: 0,
   holding: false,
   currentDef: null,
+  flight: null,
+  points: 0,
   stats: { waves: [] },
-  towerStats: { dmg: 0, rof: 0, rng: 0 },
   multipliers: { dmg: 1, rof: 1, rng: 1 },
-  fireT: 0,
   spawnLeft: 0,
   spawnT: 0,
   wave: null,
@@ -157,6 +342,7 @@ export const game = {
   rocket: null,
   finaleT: 0,
   confetti: [],
+  spotsView: null,
 
   async init(container) {
     this.app = new PIXI.Application();
@@ -173,14 +359,15 @@ export const game = {
     L.bg = new PIXI.Container();
     L.ground = new PIXI.Container();
     L.marks = new PIXI.Container();
+    L.spots = new PIXI.Container();
     L.belt = new PIXI.Container();
     L.store = new PIXI.Container();
+    L.towers = new PIXI.Container();
     L.boxes = new PIXI.Container();
     L.enemiesLayer = new PIXI.Container();
-    L.tower = new PIXI.Container();
     L.shots = new PIXI.Container();
     L.fx = new PIXI.Container();
-    stage.addChild(L.bg, L.ground, L.marks, L.belt, L.store, L.tower, L.boxes, L.enemiesLayer, L.shots, L.fx);
+    stage.addChild(L.bg, L.ground, L.marks, L.spots, L.belt, L.store, L.towers, L.boxes, L.enemiesLayer, L.shots, L.fx);
 
     // дневное небо — мягкий градиент
     const bg = new PIXI.Graphics();
@@ -198,7 +385,7 @@ export const game = {
     g.stroke({ width: 1, color: C.gridLine, alpha: 0.45 });
     L.ground.addChild(g);
 
-    // стрелки пути роботов — цепочка к магазину
+    // стрелки маршрута роботов — цепочка к магазину
     const m = new PIXI.Graphics();
     for (let i = 0; i < PATH.length - 1; i++) {
       const [ax, ay] = PATH[i];
@@ -218,6 +405,11 @@ export const game = {
       }
     }
     L.marks.addChild(m);
+
+    // площадки башен
+    this.spotsView = new PIXI.Graphics();
+    this.drawSpots(0);
+    L.spots.addChild(this.spotsView);
 
     // конвейер
     const b = new PIXI.Graphics();
@@ -249,55 +441,32 @@ export const game = {
     signText.position.set(sp.x, sp.y);
     signText.scale.set(0.62);
     L.store.addChild(signText);
-
-    this.rebuildTower();
   },
 
-  rebuildTower() {
-    const L = this.layers.tower;
-    L.removeChildren().forEach(c => c.destroy({ children: true }));
-    const g = new PIXI.Graphics();
-    const n = this.scanned.filter(d => d.type !== 'final').length;
-    // этажи растут над крышей магазина
-    for (let i = 0; i < n; i++) {
-      const z0 = 1.8 + i * 0.55, z1 = z0 + 0.5;
-      const shrink = 1 - i * 0.06;
-      const half = 1.5 * shrink;
-      isoBox(g, -half, -half * 0.75, half, half * 0.75, z0, z1,
-        i % 2 ? C.cardboard : C.cardboardTop, C.cardboardDark, C.cardboard);
+  // площадки: пульсируют, когда игрок тратит очко
+  drawSpots(pulseK) {
+    const v = this.spotsView;
+    v.clear();
+    const occupied = new Set(this.towers.map(t => t.spotIdx));
+    for (let i = 0; i < SPOTS.length; i++) {
+      if (occupied.has(i)) continue;
+      const p = iso(SPOTS[i][0], SPOTS[i][1], 0.02);
+      const a = 0.25 + pulseK * 0.5;
+      v.ellipse(p.x, p.y, 34, 17).fill({ color: C.orange, alpha: 0.12 + pulseK * 0.1 });
+      v.ellipse(p.x, p.y, 34, 17).stroke({ width: 3, color: C.orange, alpha: a });
     }
-    // орудие на вершине
-    const topZ = 1.8 + n * 0.55 + 0.35;
-    const muzzle = iso(0, 0, topZ);
-    const turret = new PIXI.Container();
-    turret.position.set(muzzle.x, muzzle.y);
-    const tg = new PIXI.Graphics();
-    tg.circle(0, 0, 20).fill(C.charcoal);
-    tg.circle(0, 0, 13).fill(C.orange);
-    tg.rect(0, -4, 34, 8).fill(C.charcoal);
-    turret.addChild(tg);
-    const flash = new PIXI.Graphics();
-    flash.poly([0, -14, 4, -4, 14, 0, 4, 4, 0, 14, -4, 4, -14, 0, -4, -4]).fill(C.orange);
-    flash.position.set(38, 0);
-    flash.visible = false;
-    turret.addChild(flash);
-    this.turret = turret;
-    this.muzzleFlash = flash;
-    this.muzzlePos = { x: muzzle.x, y: muzzle.y };
-    L.addChild(g, turret);
   },
 
   // ---- посылки ----
 
   spawnBox() {
     this.currentDef = BOXES[this.boxIndex];
-    // геометрия коробки — в локальных координатах контейнера
     const li = (x, y, z = 0) => { const p = iso(x, y, z); return { x: p.x - OX, y: p.y - OY }; };
-    const lpoly = (g, pts, color, alpha = 1) => g.poly(pts.map(p => [p.x, p.y]).flat()).fill({ color, alpha });
-    const libox = (g, x0, y0, x1, y1, z0, z1, top, left, right) => {
-      lpoly(g, [li(x1, y0, z1), li(x1, y1, z1), li(x1, y1, z0), li(x1, y0, z0)], right);
-      lpoly(g, [li(x0, y1, z1), li(x1, y1, z1), li(x1, y1, z0), li(x0, y1, z0)], left);
-      lpoly(g, [li(x0, y0, z1), li(x1, y0, z1), li(x1, y1, z1), li(x0, y1, z1)], top);
+    const lpoly = (gr, pts, color, alpha = 1) => gr.poly(pts.map(p => [p.x, p.y]).flat()).fill({ color, alpha });
+    const libox = (gr, x0, y0, x1, y1, z0, z1, top, left, right) => {
+      lpoly(gr, [li(x1, y0, z1), li(x1, y1, z1), li(x1, y1, z0), li(x1, y0, z0)], right);
+      lpoly(gr, [li(x0, y1, z1), li(x1, y1, z1), li(x1, y1, z0), li(x0, y1, z0)], left);
+      lpoly(gr, [li(x0, y0, z1), li(x1, y0, z1), li(x1, y1, z1), li(x0, y1, z1)], top);
     };
     const g = new PIXI.Graphics();
     const half = 0.42;
@@ -325,7 +494,6 @@ export const game = {
     if (!ring) return;
     ring.clear();
     if (this.scanT > 0.02) {
-      // всё в локальных координатах контейнера коробки
       ring.rect(-46, -132, 92, 9).fill({ color: 0x000000, alpha: 0.35 });
       ring.rect(-44, -130, 88 * this.scanT, 5).fill(C.orange);
       const half = 0.42;
@@ -333,13 +501,39 @@ export const game = {
       const pts = [li(-half, -half, 0.72), li(half, -half, 0.72), li(half, half, 0.72), li(-half, half, 0.72)]
         .map(q => [q.x, q.y]);
       ring.poly(pts.flat()).stroke({ width: 3, color: C.orange, alpha: 0.4 + 0.6 * this.scanT });
-      // искорки сканирования
       const tw = performance.now() / 1000;
       for (let i = 0; i < 3; i++) {
         const a = tw * 2 + (i * Math.PI * 2) / 3;
         ring.circle(Math.cos(a) * 55, -34 + Math.sin(a) * 40, 4).fill({ color: C.white, alpha: 0.55 + 0.45 * Math.sin(tw * 12 + i) });
       }
     }
+  },
+
+  // ---- очки, башни ----
+
+  placeTower(spotIdx, def) {
+    this.towers.push(new Tower(spotIdx, def));
+    const p = iso(SPOTS[spotIdx][0], SPOTS[spotIdx][1], 0.3);
+    this.spawnPop(p.x, p.y - 10, false);
+    this.drawSpots(0);
+  },
+
+  slowAt(x, y) {
+    for (const t of this.towers) {
+      if (t.kind !== 'slow') continue;
+      if (Math.hypot(SPOTS[t.spotIdx][0] - x, SPOTS[t.spotIdx][1] - y) <= 3.4) return 0.55;
+    }
+    return 1;
+  },
+
+  arsenalDps() {
+    let dps = 0;
+    for (const t of this.towers) {
+      if (t.kind === 'slow' || t.kind === 'amp') continue;
+      const s = t.stats();
+      dps += s.dmg / s.interval;
+    }
+    return dps;
   },
 
   // ---- волна ----
@@ -359,20 +553,33 @@ export const game = {
     const i = w.drones + w.crawlers + w.swarm + (w.boss ? 1 : 0) - this.spawnLeft;
     let kind, hp, speed, scale, boss = false;
     if (w.boss && this.spawnLeft === 1) { kind = 'boss'; hp = 60; speed = 0.55; scale = 2.1; boss = true; }
-    else if (i % 3 === 0 && i / 3 < w.drones) { kind = 'drone'; hp = 3; speed = 1.5; scale = 0.9; }
-    else if (i % 3 === 1 && i / 3 < w.crawlers) { kind = 'crawler'; hp = 12; speed = 0.75; scale = 1.35; }
-    else { kind = 'swarm'; hp = 2; speed = 1.9; scale = 0.7; }
+    else if (i % 3 === 0 && i / 3 < w.drones) { kind = 'drone'; hp = 6; speed = 1.5; scale = 0.9; }
+    else if (i % 3 === 1 && i / 3 < w.crawlers) { kind = 'crawler'; hp = 20; speed = 0.75; scale = 1.35; }
+    else { kind = 'swarm'; hp = 4; speed = 1.9; scale = 0.7; }
     hp *= w.hpMult;
     this.enemies.push(new Enemy(this.layers, w, kind, hp, speed * w.speed, scale, boss));
     this.spawnLeft--;
   },
 
-  weapon() {
-    return weaponStats(this.towerStats.dmg, this.towerStats.rof, this.towerStats.rng,
-      this.multipliers.dmg, this.multipliers.rof, this.multipliers.rng);
+  endWave() {
+    this.stats.waves.push({
+      killed: this.waveKilled,
+      broken: this.waveBroken,
+      total: this.waveKilled + this.waveBroken,
+      dps: Math.round(this.arsenalDps() * 10) / 10,
+    });
+    this.waveIdx++;
+    this.ui.waveDone();
+    this.multipliers = { dmg: 1, rof: 1, rng: 1 };
+    this.state = 'belt';
+    this.spawnBox();
   },
 
-  // поп-эффект: кольцо + искры (уничтожение робота, доставка посылки)
+  updateShots(dt) {
+    for (let i = this.shots.length - 1; i >= 0; i--) this.shots[i].update(dt);
+  },
+
+  // поп-эффект: кольцо + искры
   spawnPop(x, y, big = false) {
     const ring = new PIXI.Graphics();
     ring.circle(0, 0, big ? 22 : 12).stroke({ width: 5, color: C.orange });
@@ -390,75 +597,14 @@ export const game = {
     }
   },
 
-  fire() {
-    const st = this.weapon();
-    let best = null, bestD = Infinity;
-    for (const e of this.enemies) {
-      const d = Math.hypot(e.world.x, e.world.y);
-      if (d < bestD && d <= st.range) { bestD = d; best = e; }
-    }
-    if (!best) return;
-    const shot = new PIXI.Graphics();
-    shot.circle(0, 0, 8).fill(C.orange);
-    shot.circle(0, 0, 4).fill(C.white);
-    shot.position.set(this.muzzlePos.x, this.muzzlePos.y);
-    shot.userData = { target: best, dmg: st.damage };
-    this.layers.shots.addChild(shot);
-    this.muzzleFlash.visible = true;
-    tween(this.muzzleFlash, { alpha: 0 }, 0.12, () => { this.muzzleFlash.visible = false; this.muzzleFlash.alpha = 1; });
-  },
-
-  updateShots(dt) {
-    const layer = this.layers.shots;
-    for (let i = layer.children.length - 1; i >= 0; i--) {
-      const s = layer.children[i];
-      const target = s.userData.target;
-      let tx, ty;
-      if (target && !target.dead) {
-        const p = iso(target.world.x, target.world.y, 0.6);
-        tx = p.x; ty = p.y;
-      } else {
-        tx = s.x + (s.userData.vx || 100) * dt; ty = s.y + (s.userData.vy || 0) * dt;
-        s.userData.vx = s.userData.vx || 100;
-      }
-      const dx = tx - s.x, dy = ty - s.y;
-      const dist = Math.hypot(dx, dy);
-      const speed = 560;
-      if (target && !target.dead && dist < 24) {
-        target.hit(s.userData.dmg);
-        if (target.dead) this.waveKilled++;
-        s.destroy();
-        continue;
-      }
-      s.x += dx / dist * speed * dt;
-      s.y += dy / dist * speed * dt;
-      if (!target || target.dead) { s.userData.vx = dx / dist * speed; s.userData.vy = dy / dist * speed; }
-      if (s.x < -50 || s.x > 1330 || s.y < -50 || s.y > 770) s.destroy();
-    }
-  },
-
-  endWave() {
-    this.stats.waves.push({
-      killed: this.waveKilled,
-      broken: this.waveBroken,
-      total: this.waveKilled + this.waveBroken,
-      dps: Math.round(this.weapon().dps * 10) / 10,
-    });
-    this.waveIdx++;
-    this.ui.waveDone();
-    this.multipliers = { dmg: 1, rof: 1, rng: 1 };
-    this.state = 'belt';
-    this.spawnBox();
-  },
-
   // ---- финал ----
 
   startFinale() {
     this.state = 'finale_anim';
     this.finaleT = 0;
     this.ui.setHint('');
-    const topZ = 1.8 + this.scanned.filter(d => d.type !== 'final').length * 0.55 + 0.8;
-    const p = iso(0, 0, topZ);
+    if (this.box) { this.box.view.destroy({ children: true }); this.box = null; }
+    const p = iso(0, 0, 2.6);
     const r = new PIXI.Container();
     const g = new PIXI.Graphics();
     g.roundRect(-14, -60, 28, 80, 12).fill(C.white);
@@ -472,7 +618,6 @@ export const game = {
     this.layers.fx.addChild(r);
     this.rocket = r;
     tween(r, { alpha: 1 }, 0.4);
-    // конфетти
     for (let i = 0; i < 40; i++) {
       const c = new PIXI.Graphics();
       c.rect(-5, -3, 10, 6).fill(Math.random() > 0.5 ? C.orange : C.blue);
@@ -513,15 +658,25 @@ export const game = {
     cv.addEventListener('pointerdown', e => {
       const p = toCanvas(e);
       if (this.state === 'scan' && this.overBox(p)) {
-        // клик даёт сразу chunk прогресса, зажатие — непрерывный скан
         this.scanT = Math.min(1, this.scanT + 0.34);
         this.holding = true;
       }
+      else if (this.state === 'build' && this.points > 0) {
+        // трата очка: постройка на площадке...
+        for (let i = 0; i < SPOTS.length; i++) {
+          if (this.towers.some(t => t.spotIdx === i)) continue;
+          const sp = iso(SPOTS[i][0], SPOTS[i][1], 0);
+          if (Math.hypot(sp.x - p.x, sp.y - p.y) < 42) { this.buildAt(i); return; }
+        }
+        // ...или улучшение существующей башни
+        for (const t of this.towers) {
+          if (Math.hypot(t.view.x - p.x, t.view.y - p.y + 10) < 46) { this.upgradeAt(t); return; }
+        }
+      }
       else if (this.state === 'wave') {
-        // буст-выстрел: клик по роботу
         for (const en of this.enemies) {
           if (Math.hypot(en.view.x - p.x, en.view.y - p.y + 24) < 46 * (en.boss ? 1.8 : 1)) {
-            en.hit(this.weapon().damage * 0.5);
+            en.hit(this.nearestTowerDmg(en) * 0.5);
             if (en.dead) this.waveKilled++;
             break;
           }
@@ -530,6 +685,16 @@ export const game = {
     });
     cv.addEventListener('pointermove', e => { this.pointer = toCanvas(e); });
     window.addEventListener('pointerup', () => { this.holding = false; });
+  },
+
+  nearestTowerDmg(enemy) {
+    let best = 2;
+    for (const t of this.towers) {
+      if (t.kind === 'slow' || t.kind === 'amp') continue;
+      const d = Math.hypot(SPOTS[t.spotIdx][0] - enemy.world.x, SPOTS[t.spotIdx][1] - enemy.world.y);
+      if (d <= t.stats().range) best = Math.max(best, t.stats().dmg);
+    }
+    return best;
   },
 
   overBox(p) {
@@ -552,15 +717,18 @@ export const game = {
       case 'scan': {
         if (this.holding && this.overBox(this.pointer)) {
           this.scanT = Math.min(1, this.scanT + dt / 0.6);
-          if (this.scanT >= 1) { this.holding = false; this.state = 'card'; this.ui.showCard(this.currentDef); }
+          if (this.scanT >= 1) { this.holding = false; this.scanComplete(); }
         } else {
           this.scanT = Math.max(0, this.scanT - dt * 0.45);
         }
         this.syncScanFx();
         break;
       }
+      case 'build': {
+        this.drawSpots(0.5 + 0.5 * Math.sin(performance.now() / 240));
+        break;
+      }
       case 'fly': {
-        // полёт коробки в башню по дуге
         const f = this.flight;
         if (f && !f.view.destroyed) {
           const k = f.t;
@@ -584,16 +752,8 @@ export const game = {
             this.ui.toast(Loc.t('crushed'));
           }
         }
-        this.fireT += dt;
-        const st = this.weapon();
-        if (this.fireT >= st.interval) { this.fireT = 0; this.fire(); }
+        for (const t of this.towers) t.update(dt);
         this.updateShots(dt);
-        // прицел орудия
-        if (this.enemies.length && this.turret) {
-          const e = this.enemies[0];
-          const p = iso(e.world.x, e.world.y, 0.6);
-          this.turret.rotation = Math.atan2(p.y - this.muzzlePos.y, p.x - this.muzzlePos.x);
-        }
         if (this.spawnLeft === 0 && this.enemies.length === 0) this.endWave();
         break;
       }
@@ -603,48 +763,86 @@ export const game = {
     }
   },
 
-  // посылка отсканирована → карточка закрыта → летит в башню
-  placeBox() {
-    this.state = 'fly';
-    const n = this.scanned.length;
-    const target = iso(0, 0, 2.1 + n * 0.55);
-    const from = { ...this.box.view.position };
-    const ring = this.box.ring;
-    ring.clear();
-    this.flight = { t: 0, from, target, view: this.box.view };
-    tween(this.flight, { t: 1 }, 0.75, () => {
-      const view = this.flight.view;
-      view.destroy({ children: true });
-      this.flight = null;
-      this.box = null;
-      this.scanned.push(this.currentDef);
-      this.towerStats.dmg += this.currentDef.dmg;
-      this.towerStats.rof += this.currentDef.rof;
-      this.towerStats.rng += this.currentDef.rng;
-      this.rebuildTower();
-      this.spawnPop(target.x, target.y, false);
+  // скан завершён: факт открыт, очко получено
+  scanComplete() {
+    this.scanT = 0;
+    this.points++;
+    this.state = 'card';
+    this.ui.showCard(this.currentDef, this.points);
+  },
 
-      const idx = this.boxIndex;
+  // карточка прочитана → игрок тратит очко: строит или улучшает
+  onCardOk() {
+    if (this.currentDef.type === 'final') { this.startFinale(); return; }
+    this.state = 'build';
+    this.ui.setHint(Loc.t('hint_build') + '  ·  ' + Loc.t('points') + ': ' + this.points);
+    this.drawSpots(0.5);
+  },
+
+  // постройка: коробка летит на площадку и становится башней
+  buildAt(spotIdx) {
+    this.spendPoint();
+    this.state = 'fly';
+    this.drawSpots(0);
+    const target = iso(SPOTS[spotIdx][0], SPOTS[spotIdx][1], 0.25);
+    const from = { ...this.box.view.position };
+    this.box.ring.clear();
+    this.flight = { t: 0, from, target, view: this.box.view, spotIdx };
+    tween(this.flight, { t: 1 }, 0.7, () => {
+      this.flight.view.destroy({ children: true });
+      this.box = null;
+      const def = this.currentDef;
+      this.scanned.push(def);
       this.boxIndex++;
-      if (this.currentDef.type === 'final') { this.startFinale(); return; }
-      if (WAVE_AFTER_BOX.includes(idx)) {
-        this.state = 'tuner';
-        this.ui.showTuner();
-      } else {
-        this.spawnBox();
-      }
+      this.placeTower(this.flight.spotIdx, def);
+      this.afterPlacement(def);
     }, t => t * t * (3 - 2 * t));
   },
 
-  // мгновенная установка посылки в башню — для отладочных состояний ?shot=
-  placeDirect() {
+  // улучшение: коробка летит в башню и растворяется в ней
+  upgradeAt(tower) {
+    this.spendPoint();
+    this.state = 'fly';
+    this.drawSpots(0);
+    const target = { x: tower.view.x, y: tower.view.y - 14 };
+    const from = { ...this.box.view.position };
+    this.box.ring.clear();
+    this.flight = { t: 0, from, target, view: this.box.view, tower };
+    tween(this.flight, { t: 1 }, 0.7, () => {
+      this.flight.view.destroy({ children: true });
+      this.box = null;
+      const def = this.currentDef;
+      this.scanned.push(def);
+      this.boxIndex++;
+      this.flight.tower.upgrade();
+      const p = this.flight.target;
+      this.spawnPop(p.x, p.y, false);
+      this.afterPlacement(def);
+    }, t => t * t * (3 - 2 * t));
+  },
+
+  spendPoint() {
+    this.points--;
+  },
+
+  // что после траты очка: тюнер по расписанию или следующая посылка
+  afterPlacement(def) {
+    const idx = this.boxIndex - 1;
+    if (def.type === 'final') { this.startFinale(); return; }
+    if (WAVE_AFTER_BOX.includes(idx)) {
+      this.state = 'tuner';
+      this.ui.showTuner();
+    } else {
+      this.spawnBox();
+    }
+  },
+
+  // мгновенное сканирование — для отладочных состояний ?shot=
+  scanDirect() {
     this.currentDef = BOXES[this.boxIndex];
     this.scanned.push(this.currentDef);
-    this.towerStats.dmg += this.currentDef.dmg;
-    this.towerStats.rof += this.currentDef.rof;
-    this.towerStats.rng += this.currentDef.rng;
+    this.points++;
     this.boxIndex++;
-    this.rebuildTower();
   },
 
   skipToFinale() {
@@ -656,20 +854,21 @@ export const game = {
 
   reset() {
     for (const e of [...this.enemies]) e.destroy();
+    for (const t of [...this.towers]) t.destroy();
+    for (const s of [...this.shots]) s.destroy();
     this.layers.boxes.removeChildren().forEach(c => c.destroy({ children: true }));
-    this.layers.shots.removeChildren().forEach(c => c.destroy({ children: true }));
     this.layers.fx.removeChildren().forEach(c => c.destroy({ children: true }));
     if (this.box) { this.box.view.destroy({ children: true }); this.box = null; }
     this.scanned = [];
     this.boxIndex = 0;
     this.waveIdx = 0;
-    this.towerStats = { dmg: 0, rof: 0, rng: 0 };
+    this.points = 0;
     this.multipliers = { dmg: 1, rof: 1, rng: 1 };
     this.stats = { waves: [] };
     this.finaleShown = false;
     this.rocket = null;
     this.confetti = [];
-    this.rebuildTower();
+    this.drawSpots(0);
+    this.ui.setHint(Loc.t('hint_scan'));
   },
 };
-
