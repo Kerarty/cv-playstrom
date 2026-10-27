@@ -498,28 +498,28 @@ export const game = {
 
     // магазин Rocket Post: окна, дверь, полосатый навес, вывеска
     const s = new PIXI.Graphics();
-    isoBox(s, -2.8, -1.9, 2.8, 1.9, 0, 1.8, C.cardboardTop, C.cardboardDark, C.cardboard);
-    poly(s, [iso(-0.35, 1.901, 1.1), iso(0.35, 1.901, 1.1), iso(0.35, 1.901, 0), iso(-0.35, 1.901, 0)], C.door);
-    poly(s, [iso(-2.2, 1.901, 1.35), iso(-1.4, 1.901, 1.35), iso(-1.4, 1.901, 0.75), iso(-2.2, 1.901, 0.75)], C.glass);
-    poly(s, [iso(1.4, 1.901, 1.35), iso(2.2, 1.901, 1.35), iso(2.2, 1.901, 0.75), iso(1.4, 1.901, 0.75)], C.glass);
-    const stripes = 8;
+    isoBox(s, -2.2, -1.4, 2.2, 1.4, 0, 1.5, C.cardboardTop, C.cardboardDark, C.cardboard);
+    poly(s, [iso(-0.3, 1.401, 0.9), iso(0.3, 1.401, 0.9), iso(0.3, 1.401, 0), iso(-0.3, 1.401, 0)], C.door);
+    poly(s, [iso(-1.7, 1.401, 1.05), iso(-1.0, 1.401, 1.05), iso(-1.0, 1.401, 0.55), iso(-1.7, 1.401, 0.55)], C.glass);
+    poly(s, [iso(1.0, 1.401, 1.05), iso(1.7, 1.401, 1.05), iso(1.7, 1.401, 0.55), iso(1.0, 1.401, 0.55)], C.glass);
+    const stripes = 7;
     for (let i = 0; i < stripes; i++) {
-      const x0 = -2.8 + (5.6 / stripes) * i, x1 = x0 + 5.6 / stripes;
-      poly(s, [iso(x0, 1.9, 1.8), iso(x1, 1.9, 1.8), iso(x1, 2.35, 1.6), iso(x0, 2.35, 1.6)], i % 2 ? C.tape : C.orange);
-      poly(s, [iso(x0, 2.35, 1.6), iso(x1, 2.35, 1.6), iso(x1, 2.35, 1.45), iso(x0, 2.35, 1.45)], i % 2 ? C.tape : C.orangeDark);
+      const x0 = -2.2 + (4.4 / stripes) * i, x1 = x0 + 4.4 / stripes;
+      poly(s, [iso(x0, 1.4, 1.5), iso(x1, 1.4, 1.5), iso(x1, 1.75, 1.32), iso(x0, 1.75, 1.32)], i % 2 ? C.tape : C.orange);
+      poly(s, [iso(x0, 1.75, 1.32), iso(x1, 1.75, 1.32), iso(x1, 1.75, 1.18), iso(x0, 1.75, 1.18)], i % 2 ? C.tape : C.orangeDark);
     }
-    isoBox(s, -1.6, -1.24, 1.6, -0.96, 1.8, 2.55, C.orangeDark, C.orangeDark, C.orange);
+    isoBox(s, -1.3, -1.0, 1.3, -0.8, 1.5, 2.1, C.orangeDark, C.orangeDark, C.orange);
     const glow = new PIXI.Graphics();
-    glow.ellipse(iso(0, -1.1, 2.5).x, iso(0, -1.1, 2.5).y, 66, 22).fill({ color: C.orange, alpha: 0.14 });
+    glow.ellipse(iso(0, -0.9, 2.05).x, iso(0, -0.9, 2.05).y, 56, 18).fill({ color: C.orange, alpha: 0.14 });
     L.store.addChild(s, glow);
     const signText = new PIXI.Text({
       text: 'ROCKET POST',
       style: { fontFamily: 'Nunito, sans-serif', fontSize: 26, fontWeight: '900', fill: 0xffffff, letterSpacing: 1 },
     });
     signText.anchor.set(0.5);
-    const sp = iso(0, -1.1, 2.2);
+    const sp = iso(0, -0.9, 1.82);
     signText.position.set(sp.x, sp.y);
-    signText.scale.set(0.62);
+    signText.scale.set(0.55);
     L.store.addChild(signText);
   },
 
