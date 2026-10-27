@@ -1,7 +1,7 @@
 // Точка входа: PixiJS → сцена → интерфейс
 import { game } from './game.js';
 import { ui } from './ui.js';
-import { BOXES } from './data.js';
+import { BOXES, WAVES } from './data.js';
 import { Loc } from './loc.js';
 
 try {
@@ -31,6 +31,7 @@ try {
     } else if (shot === 'wave') {
       stage3();
       game.multipliers = { dmg: 1.4, rof: 1.4, rng: 0.2 };
+      WAVES[0].hpMult = 6; // роботы доживают до кадра
       game.startWave();
       // прокручиваю игровое время вручную: headless не качает rAF-тикер
       for (let i = 0; i < 34; i++) game.update(0.1);

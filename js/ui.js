@@ -1,6 +1,6 @@
 // DOM-интерфейс: интро, карточки, тюнер с живой математикой, отчёт, финал, CV
 import { Loc } from './loc.js';
-import { arsenalDps, forecastBreaks } from './data.js';
+import { arsenalDps, forecastBreaks, towerStats, BOXES } from './data.js';
 
 const $ = id => document.getElementById(id);
 
@@ -70,18 +70,20 @@ export const ui = {
     info.textContent = Loc.t('points') + ': ' + opts.points;
 
     if (opts.tower) {
+      // улучшение: показываем прирост характеристик уровень в уровень
       const t = opts.tower;
-      title.textContent = Loc.t('tw_' + t.kind) + ' · ур. ' + t.level;
-      const st = t.stats();
-      info.textContent = (t.kind === 'slow' || t.kind === 'amp'
+      title.textContent = Loc.t('tw_' + t.kind) + ' · ' + Loc.t('twr_' + t.kind);
+      const now = t.stats();
+      const dps = s => (s.dmg / s.interval).toFixed(1);
+      info.textContent = t.kind === 'slow' || t.kind === 'amp'
         ? Loc.t('twd_' + t.kind)
-        : 'DPS ' + (st.dmg / st.interval).toFixed(1)) + ' · ' + Loc.t('points') + ': ' + opts.points;
+        : `${Loc.t('next_dps')} ${dps(now)} → ${dps(t.nextStats())} · ${Loc.t('points')}: ${opts.points}`;
       menu.appendChild(title);
       menu.appendChild(info);
       const btn = document.createElement('button');
       btn.className = 'bm-item';
       btn.disabled = opts.points <= 0;
-      btn.innerHTML = `<span class="bm-name">${Loc.t('menu_upgrade')} ${t.level + 1}<small>+35% урона · +10% радиуса</small></span><span class="bm-cost">★1</span>`;
+      btn.innerHTML = `<span class="bm-name">${Loc.t('menu_upgrade')} ${t.level + 1}<small>+35% ${Loc.t('stat_dmg_s').toLowerCase()} · +10% ${Loc.t('stat_rng_s').toLowerCase()}</small></span><span class="bm-cost">★1</span>`;
       btn.onclick = () => { this.hideBuildMenu(); opts.onUpgrade(); };
       menu.appendChild(btn);
     } else {
@@ -96,11 +98,19 @@ export const ui = {
       }
       const dotColor = { cannon: '#ff9426', sniper: '#3ab7ff', minigun: '#8a7a5f', mortar: '#d96f14', slow: '#38b6ff', amp: '#ffb14e' };
       for (const kind of opts.kinds) {
+        // читаемые характеристики: роль, цифры, контр-плей
+        const base = towerStats(BOXES.find(b => b.kind === kind), { dmg: 0, rof: 0, rng: 0 });
+        const stats = kind === 'slow'
+          ? `${Loc.t('stat_rng_s')} ${base.range.toFixed(1)} · −45% ${Loc.t('stat_dps_s').toLowerCase()} врагам`
+          : kind === 'amp'
+            ? `${Loc.t('stat_rng_s')} ${base.range.toFixed(1)} · +30% ${Loc.t('stat_dmg_s').toLowerCase()} соседям`
+            : `${Loc.t('stat_dmg_s')} ${base.dmg.toFixed(1)} · ${Loc.t('stat_dps_s')} ${(base.dmg / base.interval).toFixed(1)} · ${Loc.t('stat_rng_s')} ${base.range.toFixed(1)}`;
         const btn = document.createElement('button');
         btn.className = 'bm-item';
         btn.disabled = opts.points <= 0;
         btn.innerHTML = `<span class="bm-dot" style="background:${dotColor[kind] || '#ff9426'}"></span>`
-          + `<span class="bm-name">${Loc.t('tw_' + kind)}<small>${Loc.t('twd_' + kind)}</small></span>`
+          + `<span class="bm-name">${Loc.t('tw_' + kind)}<small>${Loc.t('twr_' + kind)} · ${Loc.t('twa_' + kind)}</small></span>`
+          + `<span class="bm-stats">${stats}</span>`
           + `<span class="bm-cost">★1</span>`;
         btn.onclick = () => { this.hideBuildMenu(); opts.onPick(kind); };
         menu.appendChild(btn);

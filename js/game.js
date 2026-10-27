@@ -137,9 +137,10 @@ class Enemy {
 
 // ---- снаряд ----
 class Projectile {
-  constructor(from, target, dmg) {
+  constructor(from, target, dmg, splash = 0) {
     this.target = target;
     this.dmg = dmg;
+    this.splash = splash;
     this.vx = 0; this.vy = 0;
     this.view = new PIXI.Graphics();
     this.view.circle(0, 0, 8).fill(C.orange);
@@ -162,6 +163,7 @@ class Projectile {
     if (this.target && !this.target.dead && dist < 24) {
       this.target.hit(this.dmg);
       if (this.target.dead) game.waveKilled++;
+      if (this.splash > 0) game.splashAt(tx, ty, this.splash, this.dmg * 0.5);
       this.destroy();
       return;
     }
@@ -197,6 +199,14 @@ class Tower {
     const lvl = 1 + 0.35 * (this.level - 1);
     const lvlRange = 1 + 0.1 * (this.level - 1);
     return { ...s, dmg: s.dmg * lvl, range: s.range * lvlRange };
+  }
+
+  // характеристики следующего уровня — для превью улучшения
+  nextStats() {
+    this.level++;
+    const s = this.stats();
+    this.level--;
+    return s;
   }
 
   buildView() {
@@ -304,7 +314,7 @@ class Tower {
     for (const t of game.towers) {
       if (t.kind === 'amp' && Math.hypot(SPOTS[t.spotIdx][0] - SPOTS[this.spotIdx][0], SPOTS[t.spotIdx][1] - SPOTS[this.spotIdx][1]) <= t.stats().range) buff *= 1.3;
     }
-    game.shots.push(new Projectile(muzzle, best, st.dmg * buff));
+    game.shots.push(new Projectile(muzzle, best, st.dmg * buff, this.kind === 'mortar' ? 1.2 : 0));
     this.flash.visible = true;
     tween(this.flash, { alpha: 0 }, 0.12, () => { this.flash.visible = false; this.flash.alpha = 1; });
   }
@@ -651,6 +661,18 @@ export const game = {
 
   updateShots(dt) {
     for (let i = this.shots.length - 1; i >= 0; i--) this.shots[i].update(dt);
+  },
+
+  // осколки мортиры: урон всем роботам вокруг точки попадания
+  splashAt(screenX, screenY, radius, dmg) {
+    for (const e of [...this.enemies]) {
+      const p = iso(e.world.x, e.world.y, 0.6);
+      if (Math.hypot(p.x - screenX, p.y - screenY) < radius * SX) {
+        e.hit(dmg);
+        if (e.dead) this.waveKilled++;
+      }
+    }
+    this.spawnPop(screenX, screenY, false);
   },
 
   // поп-эффект: кольцо + искры
