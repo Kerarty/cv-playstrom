@@ -232,10 +232,10 @@ export const ui = {
     const quests = [
       { t: 'eridor_t', d: 'eridor_d', g: 'eridor_g', reward: '★ ×15 плейтестов' },
       { t: 'gdd_t', d: 'gdd_d', g: 'gdd_g', reward: '★ GDD → в разработку' },
-      { t: 'series_t', d: 'series_d', g: 'series_g', reward: '★ ×5 студий' },
+      { t: 'series_t', d: 'series_cv', g: 'series_g', reward: '★ 5 прототипов · 4 дисциплины' },
       { t: 'playables_t', d: 'playables_d', g: 'playables_g', reward: '★ 2 играбельных демо' },
     ];
-    const questRewardEn = ['★ 15+ playtests', '★ GDD → production', '★ ×5 studios', '★ 2 playable demos'];
+    const questRewardEn = ['★ 15+ playtests', '★ GDD → production', '★ 5 prototypes · 4 disciplines', '★ 2 playable demos'];
 
     $('cv').innerHTML = `
       <div class="cv-wrap">
