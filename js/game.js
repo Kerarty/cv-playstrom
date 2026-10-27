@@ -348,11 +348,32 @@ export const game = {
 
   async init(container) {
     this.app = new PIXI.Application();
-    await this.app.init({ width: 1280, height: 720, backgroundAlpha: 0, antialias: true });
+    await this.app.init({ width: window.innerWidth, height: window.innerHeight, backgroundAlpha: 0, antialias: true });
     container.appendChild(this.app.canvas);
+    // весь игровой мир — в контейнере, который масштабируется под окно:
+    // карта всегда видна целиком, что бы ни случилось с размерами экрана
+    this.world = new PIXI.Container();
     this.app.ticker.add(t => this.update(t.deltaMS / 1000));
     this.buildScene();
     this.bindInput();
+    this.onResize();
+    window.addEventListener('resize', () => this.onResize());
+  },
+
+  // содержание карты в экранных координатах: x −130..1410, y −55..729
+  onResize() {
+    const w = window.innerWidth, h = window.innerHeight;
+    this.app.renderer.resize(w, h);
+    const s = Math.max(0.5, Math.min(1.3, Math.min((w - 40) / 1540, (h - 140) / 784)));
+    this.world.scale.set(s);
+    this.world.x = w / 2 - 640 * s;
+    this.world.y = h / 2 + 20 - 337 * s;
+    // небо-градиент на весь канвас
+    const bg = this.bgView;
+    bg.clear();
+    for (let i = 0; i <= Math.ceil(h / 20); i++) {
+      bg.rect(0, i * 20, w, 21).fill(lerpColor(C.skyTop, C.skyBottom, Math.min(1, i * 20 / h)));
+    }
   },
 
   buildScene() {
@@ -369,13 +390,13 @@ export const game = {
     L.enemiesLayer = new PIXI.Container();
     L.shots = new PIXI.Container();
     L.fx = new PIXI.Container();
-    stage.addChild(L.bg, L.ground, L.marks, L.spots, L.belt, L.store, L.towers, L.boxes, L.enemiesLayer, L.shots, L.fx);
+    stage.addChild(L.bg);
+    stage.addChild(this.world); // мир поверх неба
+    this.world.addChild(L.ground, L.marks, L.spots, L.belt, L.store, L.towers, L.boxes, L.enemiesLayer, L.shots, L.fx);
 
-    // дневное небо — мягкий градиент
+    // дневное небо — мягкий градиент (перерисовывается на ресайзе)
     const bg = new PIXI.Graphics();
-    for (let i = 0; i < 36; i++) {
-      bg.rect(0, i * 20, 1280, 21).fill(lerpColor(C.skyTop, C.skyBottom, i / 35));
-    }
+    this.bgView = bg;
     L.bg.addChild(bg);
 
     // остров-площадка с толщиной и лёгкой сеткой
@@ -479,7 +500,7 @@ export const game = {
     }
     isoBox(s, -1.6, -1.24, 1.6, -0.96, 1.8, 2.55, C.orangeDark, C.orangeDark, C.orange);
     const glow = new PIXI.Graphics();
-    glow.ellipse(iso(0, -1.1, 2.5).x, iso(0, -1.1, 2.5).y, 96, 32).fill({ color: C.orange, alpha: 0.18 });
+    glow.ellipse(iso(0, -1.1, 2.5).x, iso(0, -1.1, 2.5).y, 66, 22).fill({ color: C.orange, alpha: 0.14 });
     L.store.addChild(s, glow);
     const signText = new PIXI.Text({
       text: 'ROCKET POST',
@@ -706,7 +727,11 @@ export const game = {
     const cv = this.app.canvas;
     const toCanvas = e => {
       const r = cv.getBoundingClientRect();
-      return { x: (e.clientX - r.left) * 1280 / r.width, y: (e.clientY - r.top) * 720 / r.height };
+      const s = this.world.scale.x;
+      return {
+        x: ((e.clientX - r.left) * this.app.renderer.width / r.width - this.world.x) / s,
+        y: ((e.clientY - r.top) * this.app.renderer.height / r.height - this.world.y) / s,
+      };
     };
     cv.addEventListener('pointerdown', e => {
       const p = toCanvas(e);
