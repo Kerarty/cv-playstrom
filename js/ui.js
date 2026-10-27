@@ -26,6 +26,7 @@ export const ui = {
     };
     $('btnAgain').onclick = () => { $('finale').classList.add('hidden'); game.reset(); game.spawnBox(); };
     $('btnToCv').onclick = () => $('cv').scrollIntoView({ behavior: 'smooth' });
+    $('btnNext').onclick = () => game.nextBox();
     for (const id of ['sDmg', 'sRof', 'sRng']) {
       $(id).addEventListener('input', () => { this.lastSlider = id; this.updateTunerPreview(); });
     }
@@ -45,17 +46,84 @@ export const ui = {
   // ---- интро ----
   hideIntro() { $('intro').classList.add('hidden'); },
 
-  // ---- подсказки ----
+  // ---- подсказки и HUD очков ----
   setHint(text) { $('hint').textContent = text; },
 
+  updatePoints(n) {
+    const chip = $('pointsChip');
+    chip.textContent = '★ ' + n;
+    chip.classList.toggle('dim', n <= 0);
+  },
+
+  setNext(visible) {
+    $('btnNext').classList.toggle('hidden', !visible);
+  },
+
+  // ---- меню башни у площадки (в духе kingdom rush) ----
+  showBuildMenu(pageX, pageY, opts) {
+    const menu = $('buildMenu');
+    menu.innerHTML = '';
+    const title = document.createElement('div');
+    title.className = 'bm-title';
+    const info = document.createElement('div');
+    info.className = 'bm-info';
+    info.textContent = Loc.t('points') + ': ' + opts.points;
+
+    if (opts.tower) {
+      const t = opts.tower;
+      title.textContent = Loc.t('tw_' + t.kind) + ' · ур. ' + t.level;
+      const st = t.stats();
+      info.textContent = (t.kind === 'slow' || t.kind === 'amp'
+        ? Loc.t('twd_' + t.kind)
+        : 'DPS ' + (st.dmg / st.interval).toFixed(1)) + ' · ' + Loc.t('points') + ': ' + opts.points;
+      menu.appendChild(title);
+      menu.appendChild(info);
+      const btn = document.createElement('button');
+      btn.className = 'bm-item';
+      btn.disabled = opts.points <= 0;
+      btn.innerHTML = `<span class="bm-name">${Loc.t('menu_upgrade')} ${t.level + 1}<small>+35% урона · +10% радиуса</small></span><span class="bm-cost">★1</span>`;
+      btn.onclick = () => { this.hideBuildMenu(); opts.onUpgrade(); };
+      menu.appendChild(btn);
+    } else {
+      title.textContent = Loc.t('menu_build');
+      menu.appendChild(title);
+      menu.appendChild(info);
+      if (!opts.kinds.length) {
+        const empty = document.createElement('div');
+        empty.className = 'bm-info';
+        empty.textContent = Loc.t('no_points');
+        menu.appendChild(empty);
+      }
+      const dotColor = { cannon: '#ff9426', sniper: '#3ab7ff', minigun: '#8a7a5f', mortar: '#d96f14', slow: '#38b6ff', amp: '#ffb14e' };
+      for (const kind of opts.kinds) {
+        const btn = document.createElement('button');
+        btn.className = 'bm-item';
+        btn.disabled = opts.points <= 0;
+        btn.innerHTML = `<span class="bm-dot" style="background:${dotColor[kind] || '#ff9426'}"></span>`
+          + `<span class="bm-name">${Loc.t('tw_' + kind)}<small>${Loc.t('twd_' + kind)}</small></span>`
+          + `<span class="bm-cost">★1</span>`;
+        btn.onclick = () => { this.hideBuildMenu(); opts.onPick(kind); };
+        menu.appendChild(btn);
+      }
+    }
+
+    menu.classList.remove('hidden');
+    const w = 250;
+    menu.style.left = Math.min(Math.max(8, pageX - w / 2), window.innerWidth - w - 10) + 'px';
+    menu.style.top = Math.min(Math.max(70, pageY - 24), window.innerHeight - menu.offsetHeight - 14) + 'px';
+  },
+
+  hideBuildMenu() { $('buildMenu').classList.add('hidden'); },
+
   // ---- карточка факта ----
-  showCard(def, points) {
+  showCard(def, points, isNew) {
     $('cardTitle').textContent = Loc.t(def.id + '_t');
     $('cardDesc').textContent = Loc.t(def.id + '_d');
     $('cardTags').textContent = Loc.t(def.id + '_g');
-    $('cardPoints').textContent = '+' + Loc.t('toast_point');
+    $('cardPoints').textContent = '★ +' + Loc.t('toast_point');
     $('btnOk').textContent = Loc.t('ok');
     $('card').classList.remove('hidden');
+    if (isNew && def.kind) this.toast(Loc.t('unlocked_toast') + Loc.t('tw_' + def.kind));
   },
 
   // ---- тюнер ----

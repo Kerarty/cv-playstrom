@@ -20,9 +20,9 @@ try {
     const stage3 = () => {
       for (let i = 0; i < 3; i++) game.scanDirect();
       // дальние от спавна площадки — роботы дойдут до кадра живыми
-      game.placeTower(3, game.scanned[0]);
-      game.placeTower(5, game.scanned[1]);
-      game.placeTower(7, game.scanned[2]);
+      game.placeTower(9, game.scanned[0]);
+      game.placeTower(7, game.scanned[1]);
+      game.placeTower(6, game.scanned[2]);
       game.towers[1].upgrade(); // показываем уровень на башне
     };
     if (shot === 'tuner') {
@@ -33,14 +33,18 @@ try {
       game.multipliers = { dmg: 1.4, rof: 1.4, rng: 0.2 };
       game.startWave();
       // прокручиваю игровое время вручную: headless не качает rAF-тикер
-      for (let i = 0; i < 20; i++) game.update(0.1);
+      for (let i = 0; i < 34; i++) game.update(0.1);
     } else if (shot === 'build') {
       stage3();
       game.scanDirect();
       game.currentDef = BOXES[game.boxIndex - 1];
       game.points = 1;
       game.state = 'build';
-      game.ui.setHint(Loc.t('hint_build') + '  ·  ' + Loc.t('points') + ': 1');
+      game.ui.updatePoints(1);
+      game.ui.setNext(true);
+      game.ui.setHint(Loc.t('hint_build'));
+      game.drawSpots(0.5);
+      game.ui.showBuildMenu(430, 300, { kinds: [...game.unlocked], points: 1, onPick: () => {} });
     } else if (shot === 'finale') {
       for (let i = 0; i < 5; i++) { game.scanDirect(); game.placeTower(i, game.scanned[i]); }
       game.stats.waves.push({ killed: 12, broken: 1, total: 13, dps: 7.7 });

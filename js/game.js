@@ -1,10 +1,10 @@
 // PixiJS-сцена: изометрический Rocket Post, конвейер, площадки башен, роботы QuickBox
 import * as PIXI from './vendor/pixi.min.mjs';
-import { C, BOXES, WAVES, WAVE_AFTER_BOX, PATH, SPOTS, CONVEYOR, towerStats } from './data.js';
+import { C, BOXES, WAVES, WAVE_AFTER_BOX, PATH, SPOTS, CONVEYOR, ROAD_HALF, DECOR_TREES, DECOR_BUSHES, towerStats } from './data.js';
 import { Loc } from './loc.js';
 
 // ---- изометрия: мир (x, y, z) → экран ----
-const OX = 620, OY = 300, SX = 44, SY = 22, ZS = 38;
+const OX = 640, OY = 330, SX = 44, SY = 22, ZS = 38;
 const iso = (x, y, z = 0) => ({ x: OX + (x - y) * SX, y: OY + (x + y) * SY - z * ZS });
 
 function lerpColor(a, b, k) {
@@ -333,6 +333,8 @@ export const game = {
   currentDef: null,
   flight: null,
   points: 0,
+  unlocked: new Set(),
+  kindDefs: {},
   stats: { waves: [] },
   multipliers: { dmg: 1, rof: 1, rng: 1 },
   spawnLeft: 0,
@@ -383,7 +385,29 @@ export const game = {
     for (let x = -10; x <= 10; x += 2) g.moveTo(iso(x, -6.5).x, iso(x, -6.5).y).lineTo(iso(x, 6.5).x, iso(x, 6.5).y);
     for (let y = -6; y <= 6; y += 2) g.moveTo(iso(-11, y).x, iso(-11, y).y).lineTo(iso(11, y).x, iso(11, y).y);
     g.stroke({ width: 1, color: C.gridLine, alpha: 0.45 });
+
+    // дорога: широкая песчаная лента со скруглёнными поворотами
+    const road = new PIXI.Graphics();
+    const w = ROAD_HALF * 48;
+    for (let pass = 0; pass < 2; pass++) {
+      const color = pass === 0 ? C.roadEdge : C.road;
+      const wPass = pass === 0 ? w + 5 : w;
+      for (let i = 0; i < PATH.length - 1; i++) {
+        const a = iso(...PATH[i]);
+        const b = iso(...PATH[i + 1]);
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const d = Math.hypot(dx, dy) || 1;
+        const px = -dy / d * wPass, py = dx / d * wPass;
+        road.poly([a.x + px, a.y + py, b.x + px, b.y + py, b.x - px, b.y - py, a.x - px, a.y - py]).fill(color);
+      }
+      for (const [x, y] of PATH) {
+        const p = iso(x, y);
+        road.circle(p.x, p.y, wPass).fill(color);
+      }
+    }
+
     L.ground.addChild(g);
+    L.ground.addChild(road);
 
     // стрелки маршрута роботов — цепочка к магазину
     const m = new PIXI.Graphics();
@@ -401,15 +425,40 @@ export const game = {
           p.x + Math.cos(ang) * 15, p.y + Math.sin(ang) * 15,
           p.x + Math.cos(ang + 2.5) * 10, p.y + Math.sin(ang + 2.5) * 10,
           p.x + Math.cos(ang - 2.5) * 10, p.y + Math.sin(ang - 2.5) * 10,
-        ]).fill({ color: C.blue, alpha: 0.55 });
+        ]).fill({ color: C.orange, alpha: 0.55 });
       }
     }
     L.marks.addChild(m);
 
-    // площадки башен
+    // площадки башен — каменные платформы
     this.spotsView = new PIXI.Graphics();
     this.drawSpots(0);
     L.spots.addChild(this.spotsView);
+
+    // декор: деревья и кусты по краям
+    const decor = new PIXI.Graphics();
+    for (const [x, y] of DECOR_TREES) {
+      const p = iso(x, y, 0);
+      decor.ellipse(p.x, p.y + 2, 26, 12).fill({ color: 0x000000, alpha: 0.15 });
+      decor.circle(p.x, p.y - 26, 24).fill(C.treeDark);
+      decor.circle(p.x - 6, p.y - 32, 16).fill(C.tree);
+      decor.circle(p.x + 8, p.y - 30, 12).fill(C.treeLight);
+    }
+    for (const [x, y] of DECOR_BUSHES) {
+      const p = iso(x, y, 0);
+      decor.ellipse(p.x, p.y + 2, 18, 8).fill({ color: 0x000000, alpha: 0.12 });
+      decor.circle(p.x - 8, p.y - 6, 10).fill(C.tree);
+      decor.circle(p.x + 4, p.y - 8, 12).fill(C.treeLight);
+      decor.circle(p.x + 12, p.y - 4, 8).fill(C.tree);
+    }
+    // штабели коробок у конвейера
+    for (const [x, y] of [[10.6, 2.1], [11.1, 1.3]]) {
+      const p = iso(x, y, 0);
+      decor.roundRect(p.x - 20, p.y - 34, 40, 34, 5).fill(C.cardboard);
+      decor.roundRect(p.x - 20, p.y - 34, 40, 10, 5).fill(C.cardboardTop);
+      decor.rect(p.x - 4, p.y - 34, 8, 34).fill(C.tape);
+    }
+    L.spots.addChild(decor);
 
     // конвейер
     const b = new PIXI.Graphics();
@@ -443,7 +492,7 @@ export const game = {
     L.store.addChild(signText);
   },
 
-  // площадки: пульсируют, когда игрок тратит очко
+  // площадки: каменные платформы; в режиме стройки пульсируют
   drawSpots(pulseK) {
     const v = this.spotsView;
     v.clear();
@@ -451,9 +500,13 @@ export const game = {
     for (let i = 0; i < SPOTS.length; i++) {
       if (occupied.has(i)) continue;
       const p = iso(SPOTS[i][0], SPOTS[i][1], 0.02);
-      const a = 0.25 + pulseK * 0.5;
-      v.ellipse(p.x, p.y, 34, 17).fill({ color: C.orange, alpha: 0.12 + pulseK * 0.1 });
-      v.ellipse(p.x, p.y, 34, 17).stroke({ width: 3, color: C.orange, alpha: a });
+      v.ellipse(p.x, p.y + 5, 38, 19).fill({ color: 0x000000, alpha: 0.18 });
+      v.ellipse(p.x, p.y, 38, 19).fill(C.charcoal);
+      v.ellipse(p.x, p.y - 3, 34, 17).fill(C.charcoalDark);
+      v.ellipse(p.x, p.y - 4, 26, 13).fill(C.orangeDark);
+      v.ellipse(p.x, p.y - 4, 18, 9).fill(C.orange);
+      const a = 0.3 + pulseK * 0.7;
+      if (pulseK > 0.02) v.ellipse(p.x, p.y - 4, 30, 15).stroke({ width: 3, color: C.orange, alpha: a });
     }
   },
 
@@ -661,16 +714,25 @@ export const game = {
         this.scanT = Math.min(1, this.scanT + 0.34);
         this.holding = true;
       }
-      else if (this.state === 'build' && this.points > 0) {
-        // трата очка: постройка на площадке...
+      else if (this.state === 'build') {
+        // трата очка: площадка → меню выбора башни, своя башня → улучшение
+        let hitSpot = -1, hitTower = null;
         for (let i = 0; i < SPOTS.length; i++) {
           if (this.towers.some(t => t.spotIdx === i)) continue;
           const sp = iso(SPOTS[i][0], SPOTS[i][1], 0);
-          if (Math.hypot(sp.x - p.x, sp.y - p.y) < 42) { this.buildAt(i); return; }
+          if (Math.hypot(sp.x - p.x, sp.y - p.y) < 42) { hitSpot = i; break; }
         }
-        // ...или улучшение существующей башни
-        for (const t of this.towers) {
-          if (Math.hypot(t.view.x - p.x, t.view.y - p.y + 10) < 46) { this.upgradeAt(t); return; }
+        if (hitSpot < 0) {
+          for (const t of this.towers) {
+            if (Math.hypot(t.view.x - p.x, t.view.y - p.y + 10) < 46) { hitTower = t; break; }
+          }
+        }
+        if (hitSpot >= 0) {
+          this.padMenu(hitSpot, e.clientX + window.scrollX, e.clientY + window.scrollY);
+        } else if (hitTower) {
+          this.towerMenu(hitTower, e.clientX + window.scrollX, e.clientY + window.scrollY);
+        } else {
+          this.ui.hideBuildMenu();
         }
       }
       else if (this.state === 'wave') {
@@ -763,47 +825,81 @@ export const game = {
     }
   },
 
-  // скан завершён: факт открыт, очко получено
+  // скан завершён: факт открыт, очко получено, тип башни разблокирован
   scanComplete() {
     this.scanT = 0;
     this.points++;
+    const def = this.currentDef;
+    this.scanned.push(def);
+    this.boxIndex++;
+    let isNew = false;
+    if (def.kind && !this.kindDefs[def.kind]) {
+      this.kindDefs[def.kind] = def;
+      this.unlocked.add(def.kind);
+      isNew = true;
+    }
     this.state = 'card';
-    this.ui.showCard(this.currentDef, this.points);
+    this.ui.showCard(def, this.points, isNew);
   },
 
-  // карточка прочитана → игрок тратит очко: строит или улучшает
+  // карточка прочитана → режим стройки: тратим очки или жмём «дальше»
   onCardOk() {
     if (this.currentDef.type === 'final') { this.startFinale(); return; }
     this.state = 'build';
-    this.ui.setHint(Loc.t('hint_build') + '  ·  ' + Loc.t('points') + ': ' + this.points);
+    this.ui.setHint(Loc.t('hint_build'));
+    this.ui.updatePoints(this.points);
+    this.ui.setNext(true);
     this.drawSpots(0.5);
   },
 
-  // постройка: коробка летит на площадку и становится башней
-  buildAt(spotIdx) {
+  // клик по площадке в режиме стройки → меню выбора башни
+  padMenu(spotIdx, pageX, pageY) {
+    this.ui.showBuildMenu(pageX, pageY, {
+      kinds: [...this.unlocked],
+      points: this.points,
+      onPick: kind => this.tryBuild(spotIdx, kind),
+    });
+  },
+
+  // клик по своей башне → меню улучшения
+  towerMenu(tower, pageX, pageY) {
+    this.ui.showBuildMenu(pageX, pageY, {
+      kinds: [],
+      points: this.points,
+      tower,
+      onUpgrade: () => this.tryUpgrade(tower),
+    });
+  },
+
+  tryBuild(spotIdx, kind) {
+    if (this.points <= 0) { this.ui.toast(Loc.t('no_points')); return false; }
     this.spendPoint();
     this.state = 'fly';
     this.drawSpots(0);
+    this.ui.hideBuildMenu();
+    this.ui.updatePoints(this.points);
     const target = iso(SPOTS[spotIdx][0], SPOTS[spotIdx][1], 0.25);
     const from = { ...this.box.view.position };
     this.box.ring.clear();
-    this.flight = { t: 0, from, target, view: this.box.view, spotIdx };
+    this.flight = { t: 0, from, target, view: this.box.view, spotIdx, kind };
     tween(this.flight, { t: 1 }, 0.7, () => {
       this.flight.view.destroy({ children: true });
       this.box = null;
-      const def = this.currentDef;
-      this.scanned.push(def);
-      this.boxIndex++;
-      this.placeTower(this.flight.spotIdx, def);
-      this.afterPlacement(def);
+      this.placeTower(this.flight.spotIdx, this.kindDefs[this.flight.kind]);
+      this.spawnPop(iso(SPOTS[this.flight.spotIdx][0], SPOTS[this.flight.spotIdx][1], 0.3).x,
+        iso(SPOTS[this.flight.spotIdx][0], SPOTS[this.flight.spotIdx][1], 0.3).y - 10, false);
+      this.afterBox();
     }, t => t * t * (3 - 2 * t));
+    return true;
   },
 
-  // улучшение: коробка летит в башню и растворяется в ней
-  upgradeAt(tower) {
+  tryUpgrade(tower) {
+    if (this.points <= 0) { this.ui.toast(Loc.t('no_points')); return false; }
     this.spendPoint();
     this.state = 'fly';
     this.drawSpots(0);
+    this.ui.hideBuildMenu();
+    this.ui.updatePoints(this.points);
     const target = { x: tower.view.x, y: tower.view.y - 14 };
     const from = { ...this.box.view.position };
     this.box.ring.clear();
@@ -811,24 +907,22 @@ export const game = {
     tween(this.flight, { t: 1 }, 0.7, () => {
       this.flight.view.destroy({ children: true });
       this.box = null;
-      const def = this.currentDef;
-      this.scanned.push(def);
-      this.boxIndex++;
       this.flight.tower.upgrade();
-      const p = this.flight.target;
-      this.spawnPop(p.x, p.y, false);
-      this.afterPlacement(def);
+      this.spawnPop(this.flight.target.x, this.flight.target.y, false);
+      this.afterBox();
     }, t => t * t * (3 - 2 * t));
+    return true;
   },
 
   spendPoint() {
     this.points--;
+    this.ui.updatePoints(this.points);
   },
 
-  // что после траты очка: тюнер по расписанию или следующая посылка
-  afterPlacement(def) {
+  // посылка потреблена: тюнер по расписанию или следующая коробка
+  afterBox() {
+    this.ui.setNext(false);
     const idx = this.boxIndex - 1;
-    if (def.type === 'final') { this.startFinale(); return; }
     if (WAVE_AFTER_BOX.includes(idx)) {
       this.state = 'tuner';
       this.ui.showTuner();
@@ -837,16 +931,29 @@ export const game = {
     }
   },
 
+  // кнопка «следующая посылка»: копим очко дальше
+  nextBox() {
+    this.ui.hideBuildMenu();
+    if (this.box) { this.box.view.destroy({ children: true }); this.box = null; }
+    this.afterBox();
+  },
+
   // мгновенное сканирование — для отладочных состояний ?shot=
   scanDirect() {
     this.currentDef = BOXES[this.boxIndex];
     this.scanned.push(this.currentDef);
     this.points++;
+    if (this.currentDef.kind && !this.kindDefs[this.currentDef.kind]) {
+      this.kindDefs[this.currentDef.kind] = this.currentDef;
+      this.unlocked.add(this.currentDef.kind);
+    }
     this.boxIndex++;
   },
 
   skipToFinale() {
     if (this.state === 'finale_anim' || this.state === 'finale') return;
+    this.ui.setNext(false);
+    this.ui.hideBuildMenu();
     if (this.box) { this.box.view.destroy({ children: true }); this.box = null; }
     for (const e of [...this.enemies]) e.destroy();
     this.startFinale();
@@ -863,12 +970,16 @@ export const game = {
     this.boxIndex = 0;
     this.waveIdx = 0;
     this.points = 0;
+    this.unlocked = new Set();
+    this.kindDefs = {};
     this.multipliers = { dmg: 1, rof: 1, rng: 1 };
     this.stats = { waves: [] };
     this.finaleShown = false;
     this.rocket = null;
     this.confetti = [];
     this.drawSpots(0);
+    this.ui.updatePoints(0);
+    this.ui.setNext(false);
     this.ui.setHint(Loc.t('hint_scan'));
   },
 };
