@@ -1,6 +1,6 @@
 // PixiJS-сцена: изометрический Rocket Post, конвейер, площадки башен, роботы QuickBox
 import * as PIXI from './vendor/pixi.min.mjs';
-import { C, BOXES, WAVES, WAVE_AFTER_BOX, PATH, SPOTS, CONVEYOR, ROAD_HALF, DECOR_TREES, DECOR_BUSHES, towerStats } from './data.js';
+import { C, BOXES, WAVES, WAVE_AFTER_BOX, PATH, SPOTS, CONVEYOR, ROAD_HALF, DECOR_TREES, DECOR_BUSHES, EXPRESS, towerStats } from './data.js';
 import { Loc } from './loc.js';
 
 // ---- изометрия: мир (x, y, z) → экран ----
@@ -129,6 +129,7 @@ class Enemy {
   }
 
   destroy() {
+    this.dead = true; // прорвавшегося тоже считаем потерянной целью для снарядов
     this.view.destroy({ children: true });
     const i = game.enemies.indexOf(this);
     if (i >= 0) game.enemies.splice(i, 1);
@@ -141,7 +142,6 @@ class Projectile {
     this.target = target;
     this.dmg = dmg;
     this.splash = splash;
-    this.vx = 0; this.vy = 0;
     this.view = new PIXI.Graphics();
     this.view.circle(0, 0, 8).fill(C.orange);
     this.view.circle(0, 0, 4).fill(C.white);
@@ -150,29 +150,20 @@ class Projectile {
   }
 
   update(dt) {
-    let tx, ty;
-    if (this.target && !this.target.dead) {
-      const p = iso(this.target.world.x, this.target.world.y, 0.6);
-      tx = p.x; ty = p.y;
-    } else {
-      tx = this.view.x + this.vx * dt; ty = this.view.y + this.vy * dt;
-    }
-    const dx = tx - this.view.x, dy = ty - this.view.y;
+    // цель потеряна (сбил кто-то другой или прорвалась) — снаряд исчезает, а не замирает на земле
+    if (!this.target || this.target.dead) { this.destroy(); return; }
+    const p = iso(this.target.world.x, this.target.world.y, 0.6);
+    const dx = p.x - this.view.x, dy = p.y - this.view.y;
     const dist = Math.hypot(dx, dy);
-    const speed = 560;
-    if (this.target && !this.target.dead && dist < 24) {
+    if (dist < 24) {
       this.target.hit(this.dmg);
       if (this.target.dead) game.waveKilled++;
-      if (this.splash > 0) game.splashAt(tx, ty, this.splash, this.dmg * 0.5);
+      if (this.splash > 0) game.splashAt(p.x, p.y, this.splash, this.dmg * 0.5);
       this.destroy();
       return;
     }
-    if (dist > 0.001) {
-      this.view.x += dx / dist * speed * dt;
-      this.view.y += dy / dist * speed * dt;
-      if (!this.target || this.target.dead) { this.vx = dx / dist * speed; this.vy = dy / dist * speed; }
-    }
-    if (this.view.x < -50 || this.view.x > 1330 || this.view.y < -50 || this.view.y > 770) this.destroy();
+    this.view.x += dx / dist * 560 * dt;
+    this.view.y += dy / dist * 560 * dt;
   }
 
   destroy() {
@@ -350,6 +341,11 @@ export const game = {
   spawnLeft: 0,
   spawnT: 0,
   wave: null,
+  express: [],
+  expressLeft: 0,
+  expressT: 0,
+  expressDone: 0,
+  expressLost: 0,
   ui: null,
   rocket: null,
   finaleT: 0,
@@ -511,7 +507,6 @@ export const game = {
     isoBox(s, -1.3, -1.0, 1.3, -0.8, 1.5, 2.1, C.orangeDark, C.orangeDark, C.orange);
     const glow = new PIXI.Graphics();
     glow.ellipse(iso(0, -0.9, 2.05).x, iso(0, -0.9, 2.05).y, 56, 18).fill({ color: C.orange, alpha: 0.14 });
-    L.store.addChild(s, glow);
     const signText = new PIXI.Text({
       text: 'ROCKET POST',
       style: { fontFamily: 'Nunito, sans-serif', fontSize: 26, fontWeight: '900', fill: 0xffffff, letterSpacing: 1 },
@@ -520,7 +515,11 @@ export const game = {
     const sp = iso(0, -0.9, 1.82);
     signText.position.set(sp.x, sp.y);
     signText.scale.set(0.55);
-    L.store.addChild(signText);
+    // здание целиком отодвинуто от площадки у дороги, чтобы угол не накрывал её
+    const storeView = new PIXI.Container();
+    storeView.position.set(0.6 * SX, -0.6 * SY);
+    storeView.addChild(s, glow, signText);
+    L.store.addChild(storeView);
   },
 
   // площадки: каменные платформы; в режиме стройки пульсируют
@@ -628,8 +627,80 @@ export const game = {
     this.spawnT = 0.5;
     this.waveBroken = 0;
     this.waveKilled = 0;
+    this.expressLeft = this.wave.express || 0;
+    this.expressT = EXPRESS.first;
+    this.expressDone = 0;
+    this.expressLost = 0;
     this.state = 'wave';
     this.ui.setHint(Loc.t('hint_boost'));
+  },
+
+  // ---- приоритетные посылки: поток заказов, который нельзя прозевать ----
+
+  spawnExpress() {
+    this.expressLeft--;
+    const g = new PIXI.Graphics();
+    const li = (x, y, z = 0) => { const p = iso(x, y, z); return { x: p.x - OX, y: p.y - OY }; };
+    const lpoly = (gr, pts, color, alpha = 1) => gr.poly(pts.map(p => [p.x, p.y]).flat()).fill({ color, alpha });
+    const libox = (gr, x0, y0, x1, y1, z0, z1, top, left, right) => {
+      lpoly(gr, [li(x1, y0, z1), li(x1, y1, z1), li(x1, y1, z0), li(x1, y0, z0)], right);
+      lpoly(gr, [li(x0, y1, z1), li(x1, y1, z1), li(x1, y1, z0), li(x0, y1, z0)], left);
+      lpoly(gr, [li(x0, y0, z1), li(x1, y0, z1), li(x1, y1, z1), li(x0, y1, z1)], top);
+    };
+    const half = 0.3;
+    libox(g, -half, -half, half, half, 0, 0.52, C.cardboardTop, C.cardboardDark, C.cardboard);
+    // красная лента приоритета
+    lpoly(g, [li(-0.08, half + 0.001, 0.52), li(0.08, half + 0.001, 0.52), li(0.08, half + 0.001, 0), li(-0.08, half + 0.001, 0)], C.red);
+    // маячок «!» — цвет дублируем формой и пульсом
+    const marker = new PIXI.Graphics();
+    marker.circle(0, -46, 10).fill(C.red);
+    marker.rect(-2.5, -53, 5, 9).fill(C.white);
+    marker.circle(0, -41, 2.2).fill(C.white);
+    const view = new PIXI.Container();
+    view.addChild(g, marker);
+    const startPos = iso(CONVEYOR.from[0], CONVEYOR.to[1], 0.35);
+    view.position.set(startPos.x, startPos.y);
+    this.layers.boxes.addChild(view);
+    this.express.push({ view, marker, x: CONVEYOR.from[0] });
+  },
+
+  syncExpress(p) {
+    const pos = iso(p.x, CONVEYOR.to[1], 0.35);
+    p.view.position.set(pos.x, pos.y);
+    const t = performance.now() / 1000;
+    const k = 1 + 0.18 * Math.sin(t * 6);
+    p.marker.scale.set(k);
+  },
+
+  deliverExpress(p) {
+    const i = this.express.indexOf(p);
+    if (i >= 0) this.express.splice(i, 1);
+    this.expressDone++;
+    this.points++;
+    this.ui.updatePoints(this.points);
+    this.ui.toast(Loc.t('express_ok'));
+    this.spawnPop(p.view.x, p.view.y - 30, false);
+    // посылка улетает в окно выдачи
+    const door = iso(0.6, 1.2, 0.9);
+    tween(p.view, { x: door.x, y: door.y, alpha: 0.9 }, 0.45, () => {
+      if (p.view.destroyed) return;
+      this.spawnPop(door.x, door.y - 14, false);
+      p.view.destroy({ children: true });
+    });
+  },
+
+  loseExpress(p) {
+    const i = this.express.indexOf(p);
+    if (i >= 0) this.express.splice(i, 1);
+    this.expressLost++;
+    this.ui.toast(Loc.t('express_miss'));
+    this.spawnPop(p.view.x, p.view.y - 20, false);
+    p.view.destroy({ children: true });
+  },
+
+  clearExpress() {
+    for (const p of this.express) p.view.destroy({ children: true });
+    this.express = [];
   },
 
   spawnEnemy() {
@@ -646,12 +717,16 @@ export const game = {
   },
 
   endWave() {
+    // смена пошла дальше — незакрытые приоритеты считаем потерянными
+    for (const p of [...this.express]) this.loseExpress(p);
     this.stats.waves.push({
       killed: this.waveKilled,
       broken: this.waveBroken,
       total: this.waveKilled + this.waveBroken,
       dps: Math.round(this.arsenalDps() * 10) / 10,
+      express: { done: this.expressDone, total: this.expressDone + this.expressLost },
     });
+    for (const s of [...this.shots]) s.destroy(); // зависшие снаряды не должны доживать до следующей волны
     this.waveIdx++;
     this.ui.waveDone();
     this.multipliers = { dmg: 1, rof: 1, rng: 1 };
@@ -783,7 +858,13 @@ export const game = {
         }
       }
       else if (this.state === 'wave') {
-        for (const en of this.enemies) {
+        // приоритетная посылка важнее: клик по ней — доставка, а не выстрел
+        let hitExpress = null;
+        for (const ep of this.express) {
+          if (Math.hypot(ep.view.x - p.x, ep.view.y - 30 - p.y) < 52) { hitExpress = ep; break; }
+        }
+        if (hitExpress) { this.deliverExpress(hitExpress); }
+        else for (const en of this.enemies) {
           if (Math.hypot(en.view.x - p.x, en.view.y - p.y + 24) < 46 * (en.boss ? 1.8 : 1)) {
             en.hit(this.nearestTowerDmg(en) * 0.5);
             if (en.dead) this.waveKilled++;
@@ -853,6 +934,16 @@ export const game = {
         if (this.spawnLeft > 0) {
           this.spawnT -= dt;
           if (this.spawnT <= 0) { this.spawnT = this.wave.interval; this.spawnEnemy(); }
+        }
+        // приоритетные посылки катятся, пока идёт час пик
+        if (this.expressLeft > 0) {
+          this.expressT -= dt;
+          if (this.expressT <= 0) { this.expressT = EXPRESS.interval; this.spawnExpress(); }
+        }
+        for (const p of [...this.express]) {
+          p.x -= EXPRESS.speed * dt;
+          if (p.x <= CONVEYOR.to[0] - 0.3) { this.loseExpress(p); continue; }
+          this.syncExpress(p);
         }
         for (const e of [...this.enemies]) {
           if (e.update(dt)) {
@@ -1003,6 +1094,7 @@ export const game = {
     this.ui.hideBuildMenu();
     if (this.box) { this.box.view.destroy({ children: true }); this.box = null; }
     for (const e of [...this.enemies]) e.destroy();
+    this.clearExpress();
     this.startFinale();
   },
 
@@ -1010,6 +1102,7 @@ export const game = {
     for (const e of [...this.enemies]) e.destroy();
     for (const t of [...this.towers]) t.destroy();
     for (const s of [...this.shots]) s.destroy();
+    this.clearExpress();
     this.layers.boxes.removeChildren().forEach(c => c.destroy({ children: true }));
     this.layers.fx.removeChildren().forEach(c => c.destroy({ children: true }));
     if (this.box) { this.box.view.destroy({ children: true }); this.box = null; }

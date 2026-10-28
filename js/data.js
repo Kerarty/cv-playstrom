@@ -42,10 +42,14 @@ export const BOXES = [
 export const WAVE_AFTER_BOX = [2, 5, 8];
 
 export const WAVES = [
-  { id: 'w1', drones: 6, crawlers: 0, swarm: 0, boss: false, hpMult: 1.0, speed: 1.2, interval: 1.0 },
-  { id: 'w2', drones: 4, crawlers: 2, swarm: 6, boss: false, hpMult: 1.6, speed: 1.4, interval: 0.7 },
-  { id: 'w3', drones: 6, crawlers: 2, swarm: 8, boss: true,  hpMult: 2.2, speed: 1.5, interval: 0.6 },
+  { id: 'w1', drones: 6, crawlers: 0, swarm: 0, boss: false, hpMult: 1.0, speed: 1.2, interval: 1.0, express: 2 },
+  { id: 'w2', drones: 4, crawlers: 2, swarm: 6, boss: false, hpMult: 1.6, speed: 1.4, interval: 0.7, express: 3 },
+  { id: 'w3', drones: 6, crawlers: 2, swarm: 8, boss: true,  hpMult: 2.2, speed: 1.5, interval: 0.6, express: 3 },
 ];
+
+// приоритетные посылки в «час пик»: катятся по конвейеру к окну выдачи,
+// клик до конца ленты — +1 очко, прозевал — потерянный заказ в отчёте
+export const EXPRESS = { speed: 1.5, interval: 4.0, first: 1.5 };
 
 // маршрут роботов QuickBox — serpentine от левого края к двери Rocket Post,
 // зазоры между дорогой, магазином и площадками выверены, без наездов

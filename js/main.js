@@ -48,7 +48,7 @@ try {
       game.ui.showBuildMenu(430, 300, { kinds: [...game.unlocked], points: 1, onPick: () => {} });
     } else if (shot === 'finale') {
       for (let i = 0; i < 5; i++) { game.scanDirect(); game.placeTower(i, game.scanned[i]); }
-      game.stats.waves.push({ killed: 12, broken: 1, total: 13, dps: 7.7 });
+      game.stats.waves.push({ killed: 12, broken: 1, total: 13, dps: 7.7, express: { done: 2, total: 3 } });
       game.startFinale();
       for (let i = 0; i < 30; i++) game.updateFinale(0.1);
     } else if (shot === 'cv') {
