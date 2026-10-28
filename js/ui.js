@@ -208,7 +208,7 @@ export const ui = {
     for (const [i, w] of this.game.stats.waves.entries()) {
       const row = document.createElement('div');
       row.className = 'rep-row';
-      row.innerHTML = `<span>${Loc.t('wave')} ${i + 1}</span><span>${Loc.t('delivered')}: ${w.killed}/${w.total}</span><span>${w.broken ? '⚠ ' + w.broken : '★'}</span><span>DPS ${w.dps}</span>`;
+      row.innerHTML = `<span>${Loc.t('wave')} ${i + 1}</span><span>${Loc.t('delivered')}: ${w.killed}/${w.total}</span><span>${Loc.t('rep_express')}: ${w.express ? w.express.done + '/' + w.express.total : '—'}</span><span>${w.broken ? '⚠ ' + w.broken : '★'}</span><span>DPS ${w.dps}</span>`;
       rep.appendChild(row);
     }
 
@@ -226,9 +226,7 @@ export const ui = {
 
   // ---- блок CV: лист персонажа + квесты ----
   renderCv() {
-    const stats = [
-      ['stat_balance', 92], ['stat_gd', 85], ['stat_docs', 88], ['stat_math', 90], ['stat_code', 74],
-    ];
+    const skills = ['stat_balance', 'stat_gd', 'stat_docs', 'stat_math', 'stat_code'];
     const quests = [
       { t: 'eridor_t', d: 'eridor_d', g: 'eridor_g', reward: '★ ×15 плейтестов' },
       { t: 'gdd_t', d: 'gdd_d', g: 'gdd_g', reward: '★ GDD → в разработку' },
@@ -248,12 +246,11 @@ export const ui = {
             <p class="cv-line"><b>${Loc.t('cv_guild')}</b> ${Loc.t('cv_guild_name')}</p>
             <p class="cv-line"><b>${Loc.t('cv_level')}</b> ${Loc.t('cv_level_name')}</p>
             <p>${Loc.t('about_d')}</p>
-            <div class="cv-bars">
-              ${stats.map(([k, v]) => `
-                <div class="cv-bar">
-                  <span>${Loc.t(k)}</span>
-                  <div class="bar-track"><div class="bar-fill" style="--w:${v}%"></div></div>
-                  <em>${v}</em>
+            <div class="cv-skills">
+              ${skills.map(k => `
+                <div class="cv-skill">
+                  <b>${Loc.t(k)}</b>
+                  <span>${Loc.t(k + '_ev')}</span>
                 </div>`).join('')}
             </div>
             <p class="tiny">${Loc.t('about_g')}</p>
@@ -281,14 +278,5 @@ export const ui = {
           <a class="btn accent" href="docs/CV_Yaroslav.pdf" target="_blank" rel="noopener">PDF</a>
         </div>
       </div>`;
-
-    // полоски статов заполняются, когда лист появляется на экране
-    const bars = $('cv').querySelectorAll('.bar-fill');
-    const io = new IntersectionObserver(entries => {
-      for (const e of entries) {
-        if (e.isIntersecting) { e.target.classList.add('on'); io.unobserve(e.target); }
-      }
-    }, { threshold: 0.4 });
-    bars.forEach(b => io.observe(b));
   },
 };

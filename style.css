@@ -389,7 +389,7 @@ input[type="range"]::-moz-range-thumb {
 .finale-panel { max-width: 680px; }
 .rep-row {
   display: grid;
-  grid-template-columns: 1fr 1.4fr auto auto;
+  grid-template-columns: 1fr 1.3fr auto auto auto;
   gap: 10px;
   padding: 7px 10px;
   border-bottom: 2px dashed var(--panel-edge2);
@@ -445,34 +445,27 @@ input[type="range"]::-moz-range-thumb {
 .cv-line b { color: var(--orange-dark); }
 .cv-sheet > p { line-height: 1.55; font-size: 14.5px; color: #5c4d36; font-weight: 600; }
 
-/* статы с полосками */
-.cv-bars { margin: 16px 0 8px; display: grid; gap: 10px; }
-.cv-bar {
+/* компетенции с доказательствами — вместо произвольных цифр */
+.cv-skills { margin: 16px 0 8px; display: grid; gap: 12px; }
+.cv-skill {
   display: grid;
-  grid-template-columns: 1fr 34px;
-  gap: 8px;
-  align-items: center;
-  font-size: 13px;
-  font-weight: 800;
+  grid-template-columns: 14px 1fr;
+  gap: 4px 8px;
+  align-items: baseline;
 }
-.cv-bar em { font-style: normal; color: var(--muted); text-align: right; }
-.bar-track {
-  grid-column: 1 / 2;
-  height: 12px;
-  background: var(--panel-edge);
-  border-radius: 8px;
-  box-shadow: inset 0 2px 3px rgba(51, 41, 28, 0.15);
-  overflow: hidden;
+.cv-skill::before {
+  content: '';
+  grid-row: 1 / span 2;
+  align-self: center;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--orange);
+  box-shadow: inset 0 -2px 0 rgba(199, 106, 16, 0.45);
+  transform: rotate(45deg);
 }
-.bar-fill {
-  height: 100%;
-  width: 0;
-  border-radius: 8px;
-  background: linear-gradient(90deg, var(--orange-soft), var(--orange));
-  box-shadow: inset 0 -3px 0 rgba(199, 106, 16, 0.35);
-  transition: width 1s cubic-bezier(0.2, 0.8, 0.3, 1);
-}
-.bar-fill.on { width: var(--w); }
+.cv-skill b { font-size: 13.5px; font-weight: 900; }
+.cv-skill span { font-size: 12.5px; line-height: 1.4; color: var(--muted); font-weight: 600; }
 
 /* квесты */
 .cv-quests { display: grid; gap: 14px; align-content: start; }
